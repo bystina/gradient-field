@@ -1,0 +1,3241 @@
+<!DOCTYPE html>
+<!--
+Gradient Field
+Copyright (C) 2026 Stina Jones
+Licensed under the GNU General Public License v3.0 or later.
+See the LICENSE file for details.
+SPDX-License-Identifier: GPL-3.0-or-later
+-->
+<html lang="en-GB">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <meta name="color-scheme" content="dark light">
+    <title>Gradient Field</title>
+    
+    <link rel="icon" href="favicon.ico" sizes="any">
+    <link rel="apple-touch-icon" href="apple-touch-icon.png">
+    
+    <meta property="og:title" content="Gradient Field">
+    <meta property="og:description" content="Build structured colour grids from anchor points. Inspect step values and export as SVG, PNG, ASE, or CSS.">
+    <meta property="og:image" content="og.png">
+    <meta property="og:type" content="website">
+    <meta property="og:url" content="https://gradients.stinajones.design">
+    
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="Gradient Field">
+    <meta name="twitter:description" content="Build structured colour grids from anchor points. Inspect step values and export as SVG, PNG, ASE, or CSS.">
+    <meta name="twitter:image" content="og.png">
+    
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            color-scheme: dark light;
+            --rail-width: 52px;
+            --panel-width: 280px;
+            --control-font-size: 13px;
+            --bg-primary: #000000;
+            --bg-secondary: #0a0a0a;
+            --bg-elevated: #161616;
+            --bg-elevated-hover: #1f1f1f;
+            --border-subtle: rgba(255, 255, 255, 0.08);
+            --border-medium: rgba(255, 255, 255, 0.12);
+            --text-primary: rgba(255, 255, 255, 0.92);
+            --text-secondary: rgba(255, 255, 255, 0.6);
+            --text-tertiary: rgba(255, 255, 255, 0.4);
+            --accent-blue: #08b5fc;
+            --accent-blue-hover: #09beff;
+            --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.3);
+            --rail-handle-width: 12px;
+            --icon-muted: #6a6a6a;
+            --icon-active: #ebebeb;
+            --icon-dim: #3d3d3d;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            overflow: hidden;
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
+        }
+
+        .container {
+            display: flex;
+            height: 100vh;
+            height: 100dvh;
+        }
+
+        .sidebar {
+            position: fixed;
+            top: 8px;
+            right: var(--rail-width);
+            width: var(--panel-width);
+            height: auto;
+            max-height: calc(100dvh - 16px - env(safe-area-inset-top) - env(safe-area-inset-bottom));
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-subtle);
+            overflow-y: auto;
+            overflow-x: hidden;
+            z-index: 100;
+            transform: translateX(calc(var(--panel-width) + var(--rail-width) + 8px));
+            transition: transform 0.28s cubic-bezier(0.4, 0, 0.2, 1);
+            touch-action: manipulation;
+        }
+
+        .sidebar.panel-open {
+            transform: translateX(0);
+        }
+
+        .sidebar.collapsed {
+            transform: translateX(calc(var(--panel-width) + var(--rail-width) + 8px));
+        }
+
+        .sidebar-content {
+            padding: 20px;
+            width: var(--panel-width);
+        }
+
+        .sidebar-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 20px;
+            padding-bottom: 14px;
+            border-bottom: 1px solid var(--border-subtle);
+        }
+
+        .sidebar-title {
+            font-size: 11px;
+            font-weight: 600;
+            color: var(--text-tertiary);
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+        }
+
+
+        .rail {
+            position: fixed;
+            top: 0;
+            right: 0;
+            width: var(--rail-width);
+            height: 100dvh;
+            background: var(--bg-secondary);
+            border-left: 1px solid var(--border-subtle);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 8px 0;
+            z-index: 200;
+            padding-bottom: calc(8px + env(safe-area-inset-bottom));
+            touch-action: manipulation;
+            transition: width 0.22s cubic-bezier(0.4, 0, 0.2, 1), transform 0.22s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .rail-btn {
+            width: 44px;
+            height: 44px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: transparent;
+            border: none;
+            border-radius: 0;
+            cursor: pointer;
+            color: var(--icon-muted);
+            position: relative;
+            transition: color 0.15s ease, background 0.15s ease;
+            flex-shrink: 0;
+            touch-action: manipulation;
+        }
+
+        .rail-btn:hover {
+            color: var(--icon-active);
+            background: var(--bg-elevated-hover);
+        }
+
+        .rail-btn:focus-visible {
+            outline: 2px solid rgba(255, 255, 255, 0.5);
+            outline-offset: -2px;
+        }
+
+        .rail-btn.active {
+            color: var(--icon-active);
+            background: #1a1a1a;
+        }
+
+        .rail-btn:disabled {
+            color: var(--icon-dim);
+            cursor: not-allowed;
+            pointer-events: none;
+        }
+
+        .rail-btn svg {
+            width: 20px;
+            height: 20px;
+            flex-shrink: 0;
+            display: block;
+            overflow: visible;
+        }
+
+        .rail-divider {
+            width: 20px;
+            height: 1px;
+            background: var(--border-subtle);
+            margin: 4px 0;
+            flex-shrink: 0;
+        }
+
+        .rail-spacer {
+            flex: 1;
+        }
+
+        #railHandle {
+            display: none;
+            position: fixed;
+            top: calc(8px + env(safe-area-inset-top));
+            right: calc(8px + env(safe-area-inset-right));
+            width: 44px;
+            height: 44px;
+            align-items: center;
+            justify-content: center;
+            background: var(--bg-elevated);
+            border: none;
+            box-shadow: inset 0 0 0 1px var(--border-subtle);
+            cursor: pointer;
+            color: var(--icon-muted);
+            touch-action: manipulation;
+            z-index: 201;
+            transition: color 0.15s ease, background 0.15s ease;
+        }
+
+        #railHandle:hover {
+            color: var(--icon-active);
+            background: var(--bg-elevated-hover);
+            box-shadow: inset 0 0 0 1px var(--border-medium), var(--shadow-sm);
+        }
+
+        #railHandle:active {
+            background: var(--bg-elevated-hover);
+            box-shadow: inset 0 0 0 1px var(--border-medium);
+        }
+
+        #railHandle svg {
+            width: 20px;
+            height: 20px;
+            flex-shrink: 0;
+            display: block;
+            overflow: visible;
+        }
+
+        .rail-collapse-btn {
+            display: none;
+            width: 44px;
+            height: 44px;
+            align-items: center;
+            justify-content: center;
+            background: transparent;
+            border: none;
+            cursor: pointer;
+            color: var(--icon-muted);
+            flex-shrink: 0;
+            touch-action: manipulation;
+        }
+
+        .rail-collapse-btn:hover {
+            color: var(--icon-active);
+            background: var(--bg-elevated-hover);
+        }
+
+        .rail-collapse-btn svg {
+            width: 20px;
+            height: 20px;
+            flex-shrink: 0;
+            display: block;
+            overflow: visible;
+        }
+
+        @media (pointer: fine) {
+            .rail-btn::after {
+                content: attr(data-label);
+                position: absolute;
+                right: calc(100% + 8px);
+                top: 50%;
+                transform: translateY(-50%);
+                background: var(--bg-elevated);
+                border: 1px solid var(--border-medium);
+                color: var(--text-primary);
+                font-size: 11px;
+                font-weight: 500;
+                white-space: nowrap;
+                padding: 4px 8px;
+                pointer-events: none;
+                opacity: 0;
+                transition: opacity 0.15s ease;
+                letter-spacing: 0.01em;
+            }
+
+            .rail-btn:hover::after {
+                opacity: 1;
+            }
+        }
+
+        .info-popover {
+            position: fixed;
+            bottom: calc(12px + env(safe-area-inset-bottom));
+            right: calc(var(--rail-width) + 12px);
+            width: 260px;
+            background: var(--bg-elevated);
+            border: 1px solid var(--border-medium);
+            box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+            padding: 16px;
+            z-index: 300;
+            display: none;
+            touch-action: manipulation;
+        }
+
+        .info-popover.show {
+            display: block;
+        }
+
+        .info-popover-title {
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--text-primary);
+            margin-bottom: 8px;
+        }
+
+        .info-popover-body {
+            font-size: 12px;
+            color: var(--text-secondary);
+            line-height: 1.5;
+            margin-bottom: 12px;
+        }
+
+        .info-popover-footer {
+            padding-top: 10px;
+            border-top: 1px solid var(--border-subtle);
+        }
+
+        .main {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            min-width: 0;
+            overflow: hidden;
+            background: var(--bg-primary);
+            padding-right: var(--rail-width);
+        }
+
+        .section {
+            margin-bottom: 32px;
+        }
+
+        .section-title {
+            font-size: 11px;
+            font-weight: 600;
+            margin-bottom: 16px;
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            color: var(--text-tertiary);
+        }
+
+
+        #rowsInput,
+        #colsInput {
+            font-size: var(--control-font-size) !important;
+        }
+
+        .color-inputs input[type="text"],
+        #exportFilename,
+        #anchorColorHex,
+        #anchorColorR,
+        #anchorColorG,
+        #anchorColorB,
+        #modalBaseHex,
+        #modalBaseRgb,
+        #modalColorCount {
+            font-size: var(--control-font-size);
+        }
+
+        .btn {
+            padding: 10px 18px;
+            border: none;
+            background: var(--bg-elevated);
+            color: var(--text-primary);
+            border-radius: 0;
+            cursor: pointer;
+            font-size: 13px;
+            font-weight: 500;
+            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+            letter-spacing: -0.01em;
+            box-shadow: inset 0 0 0 1px var(--border-subtle);
+            touch-action: manipulation;
+        }
+
+        .btn:hover:not(:disabled) {
+            background: var(--bg-elevated-hover);
+            box-shadow: inset 0 0 0 1px var(--border-medium), var(--shadow-sm);
+            transform: translateY(-1px);
+        }
+
+        .btn:active:not(:disabled) {
+            transform: translateY(0);
+        }
+
+        .btn:disabled {
+            opacity: 0.4;
+            cursor: not-allowed;
+        }
+
+        .btn-compact {
+            padding: 8px 14px;
+            min-width: 40px;
+            font-size: 15px;
+            font-weight: 400;
+            border-radius: 0;
+        }
+
+        .btn-primary {
+            background: var(--accent-blue);
+            color: white;
+            box-shadow: 0 2px 8px rgba(8, 181, 252, 0.22);
+        }
+
+        .btn-primary:hover:not(:disabled) {
+            background: var(--accent-blue-hover);
+            box-shadow: 0 4px 12px rgba(8, 181, 252, 0.30);
+        }
+
+        .btn-add {
+            width: 100%;
+            background: var(--bg-elevated);
+            border: 1px dashed var(--border-medium);
+            color: var(--text-secondary);
+            box-shadow: none;
+        }
+
+        .btn-add:hover:not(:disabled) {
+            border-color: var(--text-secondary);
+            color: var(--text-primary);
+            background: var(--bg-elevated-hover);
+        }
+
+        .color-list {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .color-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 8px 10px 8px 8px;
+            background: #2a2a2a;
+            border-radius: 0;
+        }
+
+        .color-swatch-wrapper {
+            position: relative;
+            width: 40px;
+            height: 40px;
+            flex-shrink: 0;
+        }
+
+        .color-swatch-frame {
+            width: 100%;
+            height: 100%;
+            background: #ffffff;
+            padding: 4px;
+            box-sizing: border-box;
+        }
+
+        .color-swatch-fill {
+            width: 100%;
+            height: 100%;
+        }
+
+        .color-swatch-input {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            opacity: 0;
+            cursor: pointer;
+            border: none;
+        }
+
+        .color-inputs {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+            min-width: 0;
+        }
+
+        .color-inputs input[type="text"] {
+            padding: 4px 6px;
+            border: 1px solid var(--border-medium);
+            background: var(--bg-elevated);
+            color: var(--text-primary);
+            border-radius: 0;
+            font-family: monospace;
+            width: 100%;
+            box-sizing: border-box;
+            min-width: 0;
+        }
+
+        .color-inputs input[type="text"]:first-child {
+            text-transform: uppercase;
+        }
+
+        .btn-remove {
+            padding: 4px 10px;
+            background: #f95555;
+            color: white;
+            border: none;
+            border-radius: 0;
+            cursor: pointer;
+            font-size: 11px;
+            flex-shrink: 0;
+            margin-left: auto;
+            touch-action: manipulation;
+        }
+
+        .btn-add {
+            width: 100%;
+            margin-top: 8px;
+        }
+
+        /* Export */
+        .export-options {
+            margin-top: 12px;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .checkbox-group {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .checkbox-group input[type="checkbox"] {
+            width: 16px;
+            height: 16px;
+        }
+
+        .export-grid-controls {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+            margin-top: 10px;
+        }
+
+        .canvas-container {
+            flex: 1;
+            position: relative;
+            cursor: grab;
+            overflow: hidden;
+            background: var(--bg-primary);
+            touch-action: none;
+        }
+
+        .canvas-container.panning {
+            cursor: grabbing;
+        }
+
+        #gridSvg {
+            width: 100%;
+            height: 100%;
+            display: block;
+            overflow: visible;
+        }
+
+        .tooltip {
+            position: fixed;
+            background: rgba(0, 0, 0, 0.9);
+            color: white;
+            padding: 8px 12px;
+            border-radius: 0;
+            font-size: 12px;
+            font-family: monospace;
+            pointer-events: none;
+            z-index: 1000;
+            display: none;
+            line-height: 1.5;
+        }
+
+        .tooltip.show {
+            display: block;
+        }
+
+        .tooltip strong {
+            color: #fff;
+            font-weight: 600;
+        }
+
+        select {
+            padding: 6px 8px;
+            border: 1px solid var(--border-medium);
+            background: var(--bg-elevated);
+            color: var(--text-primary);
+            border-radius: 0;
+            font-size: 13px;
+        }
+
+        .rail-divider-top {
+            display: none;
+        }
+
+        /* Mobile Responsive */
+        @media (max-width: 768px) {
+            .main {
+                padding-right: 0;
+            }
+
+            .sidebar {
+                width: min(var(--panel-width), calc(100vw - var(--rail-width) - 16px));
+            }
+
+            .sidebar-content {
+                width: min(var(--panel-width), calc(100vw - var(--rail-width) - 16px));
+            }
+
+            .rail-collapse-btn {
+                display: flex;
+            }
+
+            .rail-divider-top {
+                display: block;
+            }
+
+            body.rail-collapsed .rail {
+                transform: translateX(100%);
+                pointer-events: none;
+            }
+
+            body.rail-collapsed #railHandle {
+                display: flex;
+            }
+        }
+
+        .modal--wide {
+            width: 400px;
+            max-width: 90%;
+        }
+
+        .modal--compact {
+            width: clamp(260px, 62vw, 320px);
+            max-width: clamp(260px, 62vw, 320px);
+        }
+
+        @media (max-width: 480px) and (orientation: portrait) {
+            .modal--wide {
+                width: 90%;
+                max-width: 340px;
+                margin: 20px;
+            }
+
+            .modal-title {
+                font-size: 15px;
+            }
+
+            .section {
+                margin-bottom: 16px;
+            }
+        }
+
+        @media (max-height: 500px) and (orientation: landscape) {
+            .sidebar {
+                max-height: 100dvh;
+            }
+        }
+
+        /* Modal */
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.8);
+            display: none;
+            align-items: flex-start;
+            justify-content: center;
+            z-index: 2000;
+            overflow-y: auto;
+            -webkit-overflow-scrolling: touch;
+            padding: 20px;
+            padding-top: calc(20px + env(safe-area-inset-top));
+            padding-bottom: calc(20px + env(safe-area-inset-bottom));
+            box-sizing: border-box;
+        }
+
+        .modal-overlay.show {
+            display: flex;
+        }
+
+        .modal {
+            background: var(--bg-elevated);
+            border: 1px solid var(--border-medium);
+            border-radius: 0;
+            padding: 24px;
+            max-height: calc(100dvh - 40px - env(safe-area-inset-top) - env(safe-area-inset-bottom));
+            overflow-y: auto;
+            overflow-x: hidden;
+            -webkit-overflow-scrolling: touch;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+            margin: auto;
+        }
+
+        .modal-title {
+            font-size: 18px;
+            font-weight: 600;
+            margin-bottom: 20px;
+            color: var(--text-primary);
+        }
+
+        .modal-group {
+            margin-bottom: 16px;
+        }
+
+        .modal-group label {
+            display: block;
+            font-size: 13px;
+            font-weight: 500;
+            margin-bottom: 6px;
+            color: var(--text-secondary);
+        }
+
+        .modal-group select,
+        .modal-group input[type="number"] {
+            width: 100%;
+        }
+
+        .modal-actions {
+            display: flex;
+            gap: 10px;
+            margin-top: 24px;
+        }
+
+        .modal-actions button {
+            flex: 1;
+        }
+
+        @media (max-height: 500px) and (orientation: landscape) {
+            .modal-overlay {
+                padding: 12px;
+                padding-top: calc(12px + env(safe-area-inset-top));
+                padding-bottom: calc(12px + env(safe-area-inset-bottom));
+            }
+
+            .modal {
+                padding: 16px;
+                max-height: calc(100dvh - 24px - env(safe-area-inset-top) - env(safe-area-inset-bottom));
+            }
+
+            .modal-actions {
+                position: sticky;
+                bottom: 0;
+                background: var(--bg-elevated);
+                padding-top: 12px;
+                margin-top: 16px;
+            }
+        }
+
+        #colorPickerModal {
+            background: transparent;
+            pointer-events: none;
+            display: none;
+            align-items: unset;
+            justify-content: unset;
+            padding: 0;
+            overflow: visible;
+        }
+
+        #colorPickerModal.show {
+            display: block;
+        }
+
+        #colorPickerModal > .modal {
+            position: fixed;
+            pointer-events: auto;
+            top: 80px;
+            right: calc(var(--rail-width) + 12px);
+            margin: 0;
+            max-height: calc(100dvh - 100px);
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-subtle);
+            box-shadow: var(--shadow-sm), 0 8px 24px rgba(0,0,0,0.5);
+            user-select: none;
+            cursor: default;
+            touch-action: auto;
+            padding: 14px;
+        }
+
+        #colorPickerModal > .modal .modal-title {
+            cursor: grab;
+        }
+
+        #colorPickerModal > .modal .modal-title:active {
+            cursor: grabbing;
+        }
+
+
+        @media (max-width: 768px) {
+            .sidebar input:not([type="color"]):not([type="range"]),
+            .sidebar select,
+            .sidebar textarea,
+            .modal input:not([type="color"]):not([type="range"]),
+            .modal select,
+            .modal textarea {
+                font-size: 16px !important;
+                transform: scale(0.8125);
+                transform-origin: left center;
+                width: calc(100% / 0.8125) !important;
+                padding: 6px 10px !important;
+                box-sizing: border-box;
+            }
+
+            #rowsInput,
+            #colsInput {
+                transform: scale(0.8125);
+                transform-origin: center center;
+                width: auto !important;
+                font-size: 16px !important;
+                padding: 6px !important;
+            }
+        }
+
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="sidebar" id="sidebar">
+            <div class="sidebar-content">
+            
+            <div class="sidebar-header" id="panelHeader">
+                <span class="sidebar-title" id="panelTitle">Colours</span>
+            </div>
+            
+            <div class="panel-section" id="panelColours">
+            <div class="section">
+                <div class="color-list" id="colorList"></div>
+                
+                <button class="btn btn-add" onclick="app.addColor()" id="addColorBtn" style="margin-bottom: 8px;">+ Add Colour</button>
+                
+                <div style="display: flex; gap: 8px;">
+                    <button class="btn" onclick="app.showGenerateModal()" style="flex: 1; font-size: 12px;">
+                        <svg style="width: 14px; height: 14px; margin-right: 4px; vertical-align: middle; opacity: 0.6;" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                        </svg>
+                        Generate
+                    </button>
+                    <button class="btn" onclick="app.checkAndRandom()" style="flex: 1; font-size: 12px;">
+                        <svg style="width: 14px; height: 14px; margin-right: 4px; vertical-align: middle; opacity: 0.6;" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4" />
+                        </svg>
+                        Random
+                    </button>
+                </div>
+            </div>
+            </div>
+
+            <div class="panel-section" id="panelGrid" style="display:none;">
+            <div class="section">
+                <div style="display: flex; flex-direction: column; gap: 10px;">
+                    <div style="display: flex; align-items: center; gap: 8px;">
+                        <label style="font-size: 12px; color: var(--text-tertiary); width: 45px;">Rows</label>
+                        <button class="btn btn-compact" onclick="app.removeRow()" id="removeRowBtn" title="Remove row">−</button>
+                        <input type="number" id="rowsInput" min="3" max="15" value="9" style="flex: 1; text-align: center; font-weight: 500; background: var(--bg-elevated); border: 1px solid var(--border-subtle); color: var(--text-primary); border-radius: 0; padding: 8px;">
+                        <button class="btn btn-compact" onclick="app.addRow()" id="addRowBtn" title="Add row">+</button>
+                    </div>
+                    <div style="display: flex; align-items: center; gap: 8px;">
+                        <label style="font-size: 12px; color: var(--text-tertiary); width: 45px;">Cols</label>
+                        <button class="btn btn-compact" onclick="app.removeColumn()" id="removeColBtn" title="Remove column">−</button>
+                        <input type="number" id="colsInput" min="3" max="15" value="9" style="flex: 1; text-align: center; font-weight: 500; background: var(--bg-elevated); border: 1px solid var(--border-subtle); color: var(--text-primary); border-radius: 0; padding: 8px;">
+                        <button class="btn btn-compact" onclick="app.addColumn()" id="addColBtn" title="Add column">+</button>
+                    </div>
+                </div>
+            </div>
+            </div>
+
+            <div class="panel-section" id="panelExport" style="display:none;">
+            <div class="section">
+
+                <input type="text" 
+                       id="exportFilename" 
+                       placeholder="palette" 
+                       value=""
+                       oninput="app.exportFilename = this.value"
+                       style="width: 100%; padding: 8px 12px; margin: 12px 0 8px; 
+                              background: var(--bg-elevated); 
+                              border: 1px solid var(--border-subtle); 
+                              color: var(--text-primary); border-radius: 0;">
+
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 8px;">
+                    <button class="btn" onclick="app.showExportModal('png')" style="font-size: 12px;">PNG</button>
+                    <button class="btn" onclick="app.showExportModal('svg')" style="font-size: 12px;">SVG</button>
+                    <button class="btn" onclick="app.exportASE()" style="font-size: 12px;">ASE</button>
+                    <button class="btn" onclick="app.exportCSS()" style="font-size: 12px;">CSS</button>
+                </div>
+            </div>
+            </div>
+            </div>
+        </div>
+
+        <div class="main">
+            <div class="canvas-container" id="canvasContainer">
+                <svg id="gridSvg" xmlns="http://www.w3.org/2000/svg"></svg>
+            </div>
+        </div>
+
+        <nav class="rail" id="rail" aria-label="Tools">
+            <button class="rail-collapse-btn" aria-label="Collapse rail" onclick="if(app.activePanel)app.closePanel();app._collapseRailManual();">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+            </button>
+            <div class="rail-divider rail-divider-top"></div>
+            <button class="rail-btn" id="railColours" onclick="app.openPanel('colours')" aria-label="Colours" data-label="Colours">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2C6.48 2 2 6.48 2 12c0 3.5 2.5 6 6 6h1c.55 0 1 .45 1 1s.45 1 1 1c5.52 0 10-4.48 10-10S17.52 2 12 2z"/><circle cx="8" cy="10" r="1.5" fill="currentColor" stroke="none"/><circle cx="12" cy="7" r="1.5" fill="currentColor" stroke="none"/><circle cx="16" cy="10" r="1.5" fill="currentColor" stroke="none"/><circle cx="15" cy="15" r="1.5" fill="currentColor" stroke="none"/></svg>
+            </button>
+            <button class="rail-btn" id="railGrid" onclick="app.openPanel('grid')" aria-label="Grid" data-label="Grid">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
+            </button>
+            <button class="rail-btn" id="railExport" onclick="app.openPanel('export')" aria-label="Export" data-label="Export">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="14" x2="12" y2="3"/></svg>
+            </button>
+
+            <div class="rail-divider"></div>
+
+            <button class="rail-btn" id="undoBtn" onclick="app.undo()" aria-label="Undo" data-label="Undo" title="Undo (Ctrl+Z)">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 4v6h6M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>
+            </button>
+            <button class="rail-btn" id="redoBtn" onclick="app.redo()" aria-label="Redo" data-label="Redo" title="Redo (Ctrl+Shift+Z)">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 4v6h-6M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+            </button>
+
+            <div class="rail-divider"></div>
+
+            <button class="rail-btn" id="resetViewBtn" onclick="app.enterFitMode()" aria-label="Reset view" data-label="Reset view">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="2" x2="12" y2="6"/><line x1="12" y1="18" x2="12" y2="22"/><line x1="2" y1="12" x2="6" y2="12"/><line x1="18" y1="12" x2="22" y2="12"/><circle cx="12" cy="12" r="2"/></svg>
+            </button>
+
+            <div class="rail-spacer"></div>
+            <div class="rail-divider"></div>
+
+            <button class="rail-btn" id="railInfo" onclick="app.toggleInfoPopover()" aria-label="Info" data-label="Info">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+            </button>
+        </nav>
+
+        <button id="railHandle" aria-label="Expand rail" onclick="app._expandRail()">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+        </button>
+
+        <div class="info-popover" id="infoPopover">
+            <div class="info-popover-title">Gradient Field</div>
+            <div class="info-popover-body">Build structured colour grids. Drag anchor points to shape gradients. Inspect values and export as SVG, PNG, ASE or CSS.</div>
+            <div class="info-popover-footer">
+                <a href="https://stinajones.design" target="_blank" rel="noopener"
+                   style="font-size: 10px; letter-spacing: 0.06em; color: var(--text-tertiary); text-decoration: none;"
+                   onmouseover="this.style.color='var(--text-secondary)'"
+                   onmouseout="this.style.color='var(--text-tertiary)'">built by stinajones.design</a>
+                <span style="color: var(--text-tertiary); margin: 0 6px;">·</span>
+                <a href="/LICENSE" target="_blank" rel="noopener"
+                   style="font-size: 10px; letter-spacing: 0.06em; color: var(--text-tertiary); text-decoration: none;"
+                   onmouseover="this.style.color='var(--text-secondary)'"
+                   onmouseout="this.style.color='var(--text-tertiary)'">GPLv3</a>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal-overlay" id="confirmOverwriteModal">
+        <div class="modal modal--wide" style="width: 340px;">
+            <div class="modal-title">Replace colours?</div>
+            
+            <p style="color: var(--text-secondary); font-size: 13px; line-height: 1.5; margin: 12px 0 16px 0;">
+                This will replace your current palette.
+            </p>
+            
+            <div class="modal-group">
+                <div class="checkbox-group">
+                    <input type="checkbox" id="rememberOverwriteChoice">
+                    <label for="rememberOverwriteChoice" style="font-size: 12px;">Don't ask again this session</label>
+                </div>
+            </div>
+            
+            <div class="modal-actions">
+                <button class="btn" onclick="app.cancelOverwrite()">Cancel</button>
+                <button class="btn" onclick="app.confirmOverwrite()" style="background: var(--accent-blue); color: white;">Replace</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal-overlay" id="exportModal">
+        <div class="modal modal--wide" style="width: 300px;">
+            <div class="modal-title">Export Options</div>
+            
+            <div class="modal-group">
+                <div class="checkbox-group">
+                    <input type="checkbox" id="showHex">
+                    <label for="showHex">Show HEX Labels</label>
+                </div>
+            </div>
+            
+            <div class="modal-actions">
+                <button class="btn" onclick="app.closeExportModal()">Cancel</button>
+                <button class="btn btn-primary" onclick="app.executeExport()">Export</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal-overlay" id="colorPickerModal">
+        <div class="modal modal--compact">
+            <div class="modal-title" style="display:flex; align-items:center; justify-content:space-between; margin-bottom:12px; padding-bottom:10px; border-bottom:1px solid var(--border-subtle);">
+                <span>Edit Colour</span>
+                <button onclick="app.closeColorPicker()" style="background:none; border:none; color:var(--icon-muted); cursor:pointer; padding:2px 4px; line-height:1; font-size:18px; touch-action:manipulation; flex-shrink:0;" aria-label="Close">×</button>
+            </div>
+            <input type="color" id="anchorColorNative" style="
+                width: 0; height: 0; opacity: 0; position: absolute; pointer-events: none;">
+            <div id="colorPickerSwatch" style="
+                width: 100%; height: 36px; border-radius: 0;
+                border: 1px solid var(--border-subtle);
+                cursor: pointer; margin-bottom: 10px;
+                box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+            "></div>
+            <div class="modal-group" style="margin-bottom:10px;">
+                <label style="font-size:10px; color:var(--text-tertiary); display:block; margin-bottom:4px; text-transform:uppercase; letter-spacing:0.06em;">HEX</label>
+                <input type="text" id="anchorColorHex" placeholder="#FFFFFF" style="
+                    width: 100%; padding: 7px 10px; border: 1px solid var(--border-medium);
+                    background: var(--bg-elevated); color: var(--text-primary); border-radius: 0;
+                    font-family: monospace; text-transform: uppercase; font-size: 13px;
+                    letter-spacing: 0.05em; outline: none; box-sizing: border-box;">
+            </div>
+            <div class="modal-group" style="margin-bottom:14px;">
+                <label style="font-size:10px; color:var(--text-tertiary); display:block; margin-bottom:4px; text-transform:uppercase; letter-spacing:0.06em;">RGB</label>
+                <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px;">
+                    <input type="number" id="anchorColorR" min="0" max="255" placeholder="R" style="
+                        width: 100%; padding: 7px 6px; border: 1px solid var(--border-medium);
+                        background: var(--bg-elevated); color: var(--text-primary); border-radius: 0;
+                        font-family: monospace; font-size: 13px; outline: none; text-align: center;">
+                    <input type="number" id="anchorColorG" min="0" max="255" placeholder="G" style="
+                        width: 100%; padding: 7px 6px; border: 1px solid var(--border-medium);
+                        background: var(--bg-elevated); color: var(--text-primary); border-radius: 0;
+                        font-family: monospace; font-size: 13px; outline: none; text-align: center;">
+                    <input type="number" id="anchorColorB" min="0" max="255" placeholder="B" style="
+                        width: 100%; padding: 7px 6px; border: 1px solid var(--border-medium);
+                        background: var(--bg-elevated); color: var(--text-primary); border-radius: 0;
+                        font-family: monospace; font-size: 13px; outline: none; text-align: center;">
+                </div>
+            </div>
+            <div class="modal-actions" style="margin-top:0; gap:8px;">
+                <button class="btn" onclick="app.deleteEditingAnchor()" style="background:#f95555;color:white; flex:1;">Delete</button>
+                <button class="btn btn-primary" onclick="app.applyColorPicker()" style="flex:1;">Apply</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal-overlay" id="generateModal">
+        <div class="modal modal--wide">
+            <div class="modal-title">Generate Palette</div>
+            
+            <div class="modal-group">
+                <label>Harmony Type</label>
+                <select id="modalHarmonyType" onchange="app.updateHarmonyLimits()">
+                    <option value="complementary">Complementary</option>
+                    <option value="split-complementary">Split Complementary</option>
+                    <option value="triadic">Triadic</option>
+                    <option value="monochrome">Monochrome</option>
+                </select>
+            </div>
+            
+            <div class="modal-group">
+                <label>Number of Colours <span id="colorLimitHint" style="font-size: 11px; color: var(--text-tertiary);"></span></label>
+                <input type="number" id="modalColorCount" min="1" max="6" value="4" oninput="app.updatePalettePreview()">
+            </div>
+
+            <div class="modal-group">
+                <label>Base Colour</label>
+                <input type="color" id="modalBaseColor" value="#FF6B6B" oninput="app.updateBaseColorFromPicker()" style="width: 100%; height: 40px; border-radius: 0; cursor: pointer;">
+            </div>
+            
+            <div class="modal-group">
+                <label>HEX</label>
+                <input type="text" id="modalBaseHex" value="#FF6B6B" oninput="app.updateBaseColorFromHex()" style="width: 100%; padding: 8px; border: 1px solid var(--border-medium); background: var(--bg-elevated); color: var(--text-primary); border-radius: 0; font-family: monospace; text-transform: uppercase;">
+            </div>
+            
+            <div class="modal-group">
+                <label>RGB</label>
+                <input type="text" id="modalBaseRgb" value="255, 107, 107" oninput="app.updateBaseColorFromRgb()" style="width: 100%; padding: 8px; border: 1px solid var(--border-medium); background: var(--bg-elevated); color: var(--text-primary); border-radius: 0; font-family: monospace;">
+            </div>
+            
+            <div class="modal-group">
+                <label>Preview</label>
+                <div id="palettePreview" style="display: flex; gap: 8px; height: 50px;"></div>
+            </div>
+            
+            <div class="modal-actions">
+                <button class="btn" onclick="app.closeGenerateModal()">Cancel</button>
+                <button class="btn btn-primary" onclick="app.applyGeneratePalette()">Generate</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal-overlay" id="infoModal" style="display:none!important;"></div>
+
+    <div class="tooltip" id="tooltip"></div>
+
+    <script>
+        const app = {
+            rows: 9,
+            cols: 9,
+            colors: [],
+            anchors: [],
+            gridData: [],
+            isPanning: false,
+            panStart: { x: 0, y: 0 },
+            draggedAnchor: null,
+            svgNs: 'http://www.w3.org/2000/svg',
+            _rafPending: false,
+            cellSize: 50,
+            history: [],
+            historyIndex: -1,
+            maxHistory: 30,
+            editingAnchor: null,
+            pendingExportFormat: null,
+            skipOverwriteWarning: false,
+            pendingAction: null,
+            activePanel: null,
+            highlightedAnchorIndex: null,
+            exportFilename: '',
+            zoomMode: 'fit',
+            zoomScale: 1,
+            zoomPercent: 100,
+            pan: { x: 0, y: 0 },
+            FIT_MAX_SCALE: 2.5,
+            FIT_OCCUPANCY: 0.82,
+            SMALL_GRID_THRESHOLD: 5,
+            gridScreenRect: null,
+
+            init() {
+                this.svg = document.getElementById('gridSvg');
+                this.els = {
+                    sidebar: document.getElementById('sidebar'),
+                    panelTitle: document.getElementById('panelTitle'),
+                    infoPopover: document.getElementById('infoPopover'),
+                    railInfo: document.getElementById('railInfo'),
+                    undoBtn: document.getElementById('undoBtn'),
+                    redoBtn: document.getElementById('redoBtn'),
+                    resetViewBtn: document.getElementById('resetViewBtn'),
+                    addColorBtn: document.getElementById('addColorBtn'),
+                    tooltip: document.getElementById('tooltip'),
+                    colorList: document.getElementById('colorList'),
+                    rowsInput: document.getElementById('rowsInput'),
+                    colsInput: document.getElementById('colsInput'),
+                    addRowBtn: document.getElementById('addRowBtn'),
+                    removeRowBtn: document.getElementById('removeRowBtn'),
+                    addColBtn: document.getElementById('addColBtn'),
+                    removeColBtn: document.getElementById('removeColBtn'),
+                    canvasContainer: document.getElementById('canvasContainer'),
+                    railColours: document.getElementById('railColours'),
+                    railGrid: document.getElementById('railGrid'),
+                    railExport: document.getElementById('railExport'),
+                    panelColours: document.getElementById('panelColours'),
+                    panelGrid: document.getElementById('panelGrid'),
+                    panelExport: document.getElementById('panelExport'),
+                    generateModal: document.getElementById('generateModal'),
+                    confirmOverwriteModal: document.getElementById('confirmOverwriteModal'),
+                    exportModal: document.getElementById('exportModal'),
+                    colorPickerModal: document.getElementById('colorPickerModal'),
+                    rememberOverwriteChoice: document.getElementById('rememberOverwriteChoice'),
+                    showHexCheckbox: document.getElementById('showHex'),
+                    modalBaseColor: document.getElementById('modalBaseColor'),
+                    modalBaseHex: document.getElementById('modalBaseHex'),
+                    modalBaseRgb: document.getElementById('modalBaseRgb'),
+                    modalHarmonyType: document.getElementById('modalHarmonyType'),
+                    modalColorCount: document.getElementById('modalColorCount'),
+                    colorLimitHint: document.getElementById('colorLimitHint'),
+                    palettePreview: document.getElementById('palettePreview'),
+                    anchorColorNative: document.getElementById('anchorColorNative'),
+                    anchorColorHex: document.getElementById('anchorColorHex'),
+                    anchorColorR: document.getElementById('anchorColorR'),
+                    anchorColorG: document.getElementById('anchorColorG'),
+                    anchorColorB: document.getElementById('anchorColorB'),
+                    colorPickerSwatch: document.getElementById('colorPickerSwatch'),
+                };
+                this.cellLayer   = document.createElementNS(this.svgNs, 'g');
+                this.lineLayer   = document.createElementNS(this.svgNs, 'g');
+                this.anchorLayer = document.createElementNS(this.svgNs, 'g');
+                this.cellLayer.id   = 'cellLayer';
+                this.lineLayer.id   = 'lineLayer';
+                this.anchorLayer.id = 'anchorLayer';
+                this.svg.appendChild(this.cellLayer);
+                this.svg.appendChild(this.lineLayer);
+                this.svg.appendChild(this.anchorLayer);
+
+                this.colors = [
+                    { hex: '#A964CF' },
+                    { hex: '#6969FF' },
+                    { hex: '#EF56A3' },
+                ];
+                
+                this.updateColorList();
+                this.placeDefaultAnchors();
+                this.saveState();
+                this.setupEventListeners();
+                this.updateGridButtons();
+                this.enterFitMode();
+                this._updateResetViewButton();
+                const popover = this.els.infoPopover;
+                const railInfo = this.els.railInfo;
+                if (popover) popover.classList.add('show');
+                if (railInfo) railInfo.classList.add('active');
+                this._setInfoOpen(true);
+            },
+
+            openPanel(name) {
+                this._expandRail();
+                const sidebar = this.els.sidebar;
+                const panels = {
+                    colours: this.els.panelColours,
+                    grid: this.els.panelGrid,
+                    export: this.els.panelExport,
+                };
+                const btns = {
+                    colours: this.els.railColours,
+                    grid: this.els.railGrid,
+                    export: this.els.railExport,
+                };
+                const titles = { colours: 'Colours', grid: 'Grid', export: 'Export' };
+
+                if (this.activePanel === name) {
+                    this.closePanel();
+                    return;
+                }
+
+                this.activePanel = name;
+                Object.values(panels).forEach(p => { if (p) p.style.display = 'none'; });
+                Object.values(btns).forEach(b => { if (b) b.classList.remove('active'); });
+
+                if (panels[name]) panels[name].style.display = '';
+                if (btns[name]) btns[name].classList.add('active');
+                const titleEl = this.els.panelTitle;
+                if (titleEl) titleEl.textContent = titles[name] || name;
+
+                sidebar.classList.add('panel-open');
+                sidebar.classList.remove('collapsed');
+
+                this.els.infoPopover.classList.remove('show');
+                this.els.railInfo.classList.remove('active');
+                this._setInfoOpen(false);
+
+                setTimeout(() => this._onLayoutChange(), 300);
+            },
+
+            closePanel() {
+                this.activePanel = null;
+                const sidebar = this.els.sidebar;
+                sidebar.classList.remove('panel-open');
+                sidebar.classList.add('collapsed');
+
+                [this.els.railColours, this.els.railGrid, this.els.railExport].forEach(b => {
+                    if (b) b.classList.remove('active');
+                });
+
+                this._collapseRail();
+                setTimeout(() => this._onLayoutChange(), 300);
+            },
+
+            _isMobile() {
+                return window.matchMedia('(max-width: 768px)').matches;
+            },
+
+            _collapseRail() {
+                if (this._isMobile()) document.body.classList.add('rail-collapsed');
+            },
+
+            _collapseRailManual() {
+                if (this._isMobile()) {
+                    document.body.classList.add('rail-collapsed');
+                }
+            },
+
+            _expandRail() {
+                document.body.classList.remove('rail-collapsed');
+            },
+
+            _setInfoOpen(open) {
+                document.body.classList.toggle('info-open', open);
+            },
+
+            toggleInfoPopover() {
+                const popover = this.els.infoPopover;
+                const btn = this.els.railInfo;
+                const isVisible = popover.classList.contains('show');
+                popover.classList.toggle('show', !isVisible);
+                if (btn) btn.classList.toggle('active', !isVisible);
+                this._setInfoOpen(!isVisible);
+                if (isVisible && !this.activePanel) this._collapseRail();
+            },
+
+            setupEventListeners() {
+                const container = this.els.canvasContainer;
+                let isDragging = false;
+                let pendingDragTimer = null;
+                let pendingAnchor = null;
+
+                const toGrid = (clientX, clientY) => {
+                    const rect = container.getBoundingClientRect();
+                    return {
+                        x: (clientX - rect.left - this.pan.x) / this.zoomScale,
+                        y: (clientY - rect.top  - this.pan.y) / this.zoomScale,
+                    };
+                };
+
+                container.addEventListener('mousedown', (e) => {
+                    if (e.button !== 0) return;
+                    const infoPopover = this.els.infoPopover;
+                    if (infoPopover) {
+                        infoPopover.classList.remove('show');
+                        const ib = this.els.railInfo;
+                        if (ib) ib.classList.remove('active');
+                        this._setInfoOpen(false);
+                    }
+                    if (this.activePanel) this.closePanel();
+                    if (!this.activePanel) this._collapseRail();
+                    const { x, y } = toGrid(e.clientX, e.clientY);
+                    const anchor = this.getAnchorAt(x, y);
+
+                    if (anchor) {
+                        pendingAnchor = anchor;
+                        isDragging = false;
+                        pendingDragTimer = setTimeout(() => {
+                            this.draggedAnchor = pendingAnchor;
+                            pendingDragTimer = null;
+                        }, 180);
+                    } else {
+                        this.isPanning = true;
+                        this.panStart = { x: e.clientX - this.pan.x, y: e.clientY - this.pan.y };
+                        container.classList.add('panning');
+                    }
+                });
+
+                container.addEventListener('dblclick', (e) => {
+                    clearTimeout(pendingDragTimer);
+                    pendingDragTimer = null;
+                    this.draggedAnchor = null;
+                    pendingAnchor = null;
+                    isDragging = false;
+
+                    const { x, y } = toGrid(e.clientX, e.clientY);
+                    const col = Math.floor(x / this.cellSize);
+                    const row = Math.floor(y / this.cellSize);
+                    const anchor = this.getAnchorAt(x, y);
+
+                    if (anchor) {
+                        this.openColorPicker(anchor);
+                    } else if (col >= 0 && col < this.cols && row >= 0 && row < this.rows) {
+                        const occupied = this.anchors.find(a => a.row === row && a.col === col);
+                        if (!occupied && this.colors.length < 9) {
+                            this.colors.push({ hex: '#FFFFFF' });
+                            this.anchors.push({ row, col, colorIndex: this.colors.length - 1 });
+                            this.updateColorList();
+                            this.saveState();
+                            this.render();
+                        }
+                    }
+                });
+
+                container.addEventListener('mousemove', (e) => {
+                    const { x, y } = toGrid(e.clientX, e.clientY);
+
+                    if (this.draggedAnchor) {
+                        isDragging = true;
+                        const targetCol = Math.max(0, Math.min(this.cols - 1, Math.round(x / this.cellSize)));
+                        const targetRow = Math.max(0, Math.min(this.rows - 1, Math.round(y / this.cellSize)));
+                        
+                        const occupied = this.anchors.some(a => 
+                            a !== this.draggedAnchor && a.row === targetRow && a.col === targetCol
+                        );
+                        
+                        if (!occupied) {
+                            this.draggedAnchor.col = targetCol;
+                            this.draggedAnchor.row = targetRow;
+                        }
+                        
+                        if (!this._rafPending) {
+                            this._rafPending = true;
+                            requestAnimationFrame(() => { this._rafPending = false; this.render(); });
+                        }
+                    } else if (this.isPanning) {
+                        this.pan.x = e.clientX - this.panStart.x;
+                        this.pan.y = e.clientY - this.panStart.y;
+                        if (!this._rafPending) {
+                            this._rafPending = true;
+                            requestAnimationFrame(() => { this._rafPending = false; this._applyViewBox(); });
+                        }
+                    } else {
+                        container.style.cursor = this.getAnchorAt(x, y) ? 'pointer' : 'grab';
+                        this.updateTooltip(e.clientX, e.clientY, x, y);
+                    }
+                });
+
+                const endInteraction = () => {
+                    clearTimeout(pendingDragTimer);
+                    pendingDragTimer = null;
+                    if (this.draggedAnchor && isDragging) this.saveState();
+                    this.draggedAnchor = null;
+                    pendingAnchor = null;
+                    isDragging = false;
+                    this.isPanning = false;
+                    container.classList.remove('panning');
+                };
+
+                container.addEventListener('mouseup', endInteraction);
+                container.addEventListener('mouseleave', () => {
+                    endInteraction();
+                    this.els.tooltip.classList.remove('show');
+                });
+
+                {
+                    const activePointers = new Map();
+                    let isPinching = false;
+                    let pinchStartDist = 0;
+                    let pinchStartScale = 1;
+                    let pinchStartMid = { x: 0, y: 0 };
+                    let pinchStartPan = { x: 0, y: 0 };
+                    let touchAnchor = null;
+                    let touchDragging = false;
+                    let touchPanning = false;
+                    let touchPanStart = { x: 0, y: 0 };
+                    let possiblePan = false;
+                    let panDown = { x: 0, y: 0 };
+                    const PAN_THRESHOLD = 6;
+                    let touchDragTimer = null;
+                    let lastTap = null;
+                    let lastTapTimer = null;
+                    let gestureInGrid = false;
+
+                    const ptMid = () => {
+                        const pts = [...activePointers.values()];
+                        return { x: (pts[0].clientX + pts[1].clientX) / 2, y: (pts[0].clientY + pts[1].clientY) / 2 };
+                    };
+                    const ptDist = () => {
+                        const pts = [...activePointers.values()];
+                        const dx = pts[0].clientX - pts[1].clientX;
+                        const dy = pts[0].clientY - pts[1].clientY;
+                        return Math.sqrt(dx * dx + dy * dy);
+                    };
+
+                    const showTouchTooltip = (clientX, clientY, x, y) => {
+                        const col = Math.floor(x / this.cellSize);
+                        const row = Math.floor(y / this.cellSize);
+                        const tooltip = this.els.tooltip;
+                        if (col >= 0 && col < this.cols && row >= 0 && row < this.rows) {
+                            const cell = this.gridData.find(c => c.row === row && c.col === col);
+                            if (cell) {
+                                tooltip.textContent = '';
+                                const s = document.createElement('strong'); s.textContent = cell.hex; tooltip.appendChild(s);
+                                tooltip.appendChild(document.createTextNode(`\u00A0RGB(${cell.r}, ${cell.g}, ${cell.b})`));
+                                tooltip.classList.add('show');
+                                const pad = 8;
+                                const tr = tooltip.getBoundingClientRect();
+                                let tx = clientX + 15;
+                                let ty = clientY + 15;
+                                if (tx + tr.width > window.innerWidth - pad) tx = clientX - tr.width - 10;
+                                if (ty + tr.height > window.innerHeight - pad) ty = clientY - tr.height - 10;
+                                if (tx < pad) tx = pad;
+                                if (ty < pad) ty = pad;
+                                tooltip.style.left = tx + 'px';
+                                tooltip.style.top = ty + 'px';
+                                setTimeout(() => tooltip.classList.remove('show'), 2000);
+                                return;
+                            }
+                        }
+                        tooltip.classList.remove('show');
+                    };
+
+                    container.addEventListener('pointerdown', (e) => {
+                        if (e.pointerType === 'mouse') return;
+                        if (activePointers.size === 0) {
+                            gestureInGrid = this._inGridRect(e.clientX, e.clientY);
+                            if (!gestureInGrid) return;
+                        } else if (!gestureInGrid) {
+                            return;
+                        }
+                        e.preventDefault();
+                        const ip = this.els.infoPopover;
+                        if (ip) { ip.classList.remove('show'); const ib = this.els.railInfo; if (ib) ib.classList.remove('active'); this._setInfoOpen(false); }
+                        if (this.activePanel) this.closePanel();
+                        if (!this.activePanel) this._collapseRail();
+                        container.setPointerCapture(e.pointerId);
+                        activePointers.set(e.pointerId, e);
+
+                        if (activePointers.size === 2) {
+                            isPinching = true;
+                            clearTimeout(touchDragTimer);
+                            touchDragTimer = null;
+                            this.draggedAnchor = null;
+                            touchAnchor = null;
+                            touchDragging = false;
+                            touchPanning = false;
+                            possiblePan = false;
+                            container.classList.remove('panning');
+                            pinchStartDist = ptDist();
+                            pinchStartScale = this.zoomScale;
+                            pinchStartMid = ptMid();
+                            pinchStartPan = { x: this.pan.x, y: this.pan.y };
+                            return;
+                        }
+
+                        isPinching = false;
+                        touchDragging = false;
+                        touchPanning = false;
+                        possiblePan = false;
+                        const { x, y } = toGrid(e.clientX, e.clientY);
+                        touchAnchor = this.getAnchorAt(x, y);
+                        if (!touchAnchor) {
+                            possiblePan = true;
+                            panDown = { x: e.clientX, y: e.clientY };
+                            touchPanStart = { x: e.clientX - this.pan.x, y: e.clientY - this.pan.y };
+                        } else {
+                            touchDragTimer = setTimeout(() => {
+                                this.draggedAnchor = touchAnchor;
+                                touchDragging = true;
+                                touchDragTimer = null;
+                            }, 200);
+                        }
+                    }, { passive: false });
+
+                    container.addEventListener('pointermove', (e) => {
+                        if (e.pointerType === 'mouse') return;
+                        e.preventDefault();
+                        activePointers.set(e.pointerId, e);
+
+                        if (activePointers.size >= 2 && isPinching) {
+                            const dist = ptDist();
+                            const mid = ptMid();
+                            const factor = dist / pinchStartDist;
+                            const wasFixed = this.zoomMode === 'fixed';
+                            this.zoomScale = Math.max(0.5, Math.min(6, pinchStartScale * factor));
+                            this.zoomMode = 'fixed';
+                            this.zoomPercent = Math.round(this.zoomScale * 100);
+                            this.pan.x = pinchStartPan.x + (mid.x - pinchStartMid.x);
+                            this.pan.y = pinchStartPan.y + (mid.y - pinchStartMid.y);
+                            if (!wasFixed) this._updateResetViewButton();
+                            if (!this._rafPending) {
+                                this._rafPending = true;
+                                requestAnimationFrame(() => { this._rafPending = false; this._applyViewBox(); });
+                            }
+                            return;
+                        }
+
+                        if (activePointers.size === 1 && !isPinching) {
+                            const { x, y } = toGrid(e.clientX, e.clientY);
+                            if (this.draggedAnchor) {
+                                const tc = Math.max(0, Math.min(this.cols - 1, Math.round(x / this.cellSize)));
+                                const tr = Math.max(0, Math.min(this.rows - 1, Math.round(y / this.cellSize)));
+                                const occ = this.anchors.some(a => a !== this.draggedAnchor && a.row === tr && a.col === tc);
+                                if (!occ) { this.draggedAnchor.col = tc; this.draggedAnchor.row = tr; }
+                                if (!this._rafPending) { this._rafPending = true; requestAnimationFrame(() => { this._rafPending = false; this.render(); }); }
+                            } else {
+                                if (possiblePan) {
+                                    const dx = e.clientX - panDown.x;
+                                    const dy = e.clientY - panDown.y;
+                                    if (Math.sqrt(dx * dx + dy * dy) > PAN_THRESHOLD) {
+                                        possiblePan = false;
+                                        touchPanning = true;
+                                        container.classList.add('panning');
+                                    }
+                                }
+                                if (touchPanning) {
+                                    this.pan.x = e.clientX - touchPanStart.x;
+                                    this.pan.y = e.clientY - touchPanStart.y;
+                                    if (!this._rafPending) { this._rafPending = true; requestAnimationFrame(() => { this._rafPending = false; this._applyViewBox(); }); }
+                                }
+                            }
+                        }
+                    }, { passive: false });
+
+                    const endTouch = (e) => {
+                        if (e.pointerType === 'mouse') return;
+                        e.preventDefault();
+                        const wasDragging = touchDragging || !!this.draggedAnchor;
+                        const wasPinching = isPinching;
+                        const wasPanning = touchPanning;
+
+                        clearTimeout(touchDragTimer);
+                        touchDragTimer = null;
+                        if (this.draggedAnchor && touchDragging) this.saveState();
+                        this.draggedAnchor = null;
+                        touchDragging = false;
+                        touchPanning = false;
+                        possiblePan = false;
+                        container.classList.remove('panning');
+                        activePointers.delete(e.pointerId);
+                        if (activePointers.size < 2) isPinching = false;
+                        if (activePointers.size === 0) gestureInGrid = false;
+
+                        if (!wasDragging && !wasPinching && !wasPanning) {
+                            const { x, y } = toGrid(e.clientX, e.clientY);
+                            const anchor = this.getAnchorAt(x, y);
+                            if (anchor) {
+                                const now = Date.now();
+                                if (lastTap && lastTap.anchor === anchor && now - lastTap.time < 300) {
+                                    clearTimeout(lastTapTimer);
+                                    lastTap = null;
+                                    this.openColorPicker(anchor);
+                                } else {
+                                    lastTap = { anchor, time: now };
+                                    lastTapTimer = setTimeout(() => { lastTap = null; }, 350);
+                                }
+                            } else {
+                                this.els.tooltip.classList.remove('show');
+                                showTouchTooltip(e.clientX, e.clientY, x, y);
+                            }
+                        }
+                    };
+
+                    container.addEventListener('pointerup', endTouch, { passive: false });
+                    container.addEventListener('pointercancel', endTouch, { passive: false });
+                }
+
+                this.els.rowsInput.addEventListener('change', (e) => {
+                    this.setGridSize(parseInt(e.target.value), this.cols);
+                });
+
+                this.els.colsInput.addEventListener('change', (e) => {
+                    this.setGridSize(this.rows, parseInt(e.target.value));
+                });
+
+                container.addEventListener('wheel', (e) => {
+                    if (e.ctrlKey || e.metaKey) {
+                        if (!this._inGridRect(e.clientX, e.clientY)) return;
+                        e.preventDefault();
+                        const ip = this.els.infoPopover;
+                        if (ip) { ip.classList.remove('show'); const ib = this.els.railInfo; if (ib) ib.classList.remove('active'); this._setInfoOpen(false); }
+                        if (!this.activePanel) this._collapseRail();
+                        const delta = Math.sign(e.deltaY);
+                        const sensitivity = 0.0015;
+                        const maxChange = 1.02;
+                        
+                        let factor = 1 - (delta * sensitivity * Math.abs(e.deltaY));
+                        factor = Math.max(1 / maxChange, Math.min(maxChange, factor));
+                        
+                        if (this.zoomMode === 'fit') {
+                            const currentPct = Math.round(this.zoomScale * 100);
+                            this.enterFixedMode(currentPct);
+                        }
+                        
+                        const newScale = this.zoomScale * factor;
+                        const newPct = Math.round(newScale * 100);
+                        const clampedPct = Math.max(10, Math.min(500, newPct));
+                        
+                        this.enterFixedMode(clampedPct);
+                    }
+                }, { passive: false });
+
+                this.els.generateModal.addEventListener('click', (e) => {
+                    if (e.target.id === 'generateModal') {
+                        this.closeGenerateModal();
+                    }
+                });
+
+                this.els.colorPickerModal.addEventListener('click', (e) => {
+                    if (e.target.id === 'colorPickerModal') {
+                        this.closeColorPicker();
+                    }
+                });
+
+                this.els.exportModal.addEventListener('click', (e) => {
+                    if (e.target.id === 'exportModal') {
+                        this.closeExportModal();
+                    }
+                });
+
+                this.els.confirmOverwriteModal.addEventListener('click', (e) => {
+                    if (e.target.id === 'confirmOverwriteModal') {
+                        this.cancelOverwrite();
+                    }
+                });
+
+                document.addEventListener('click', (e) => {
+                    const popover = this.els.infoPopover;
+                    const railInfo = this.els.railInfo;
+                    if (popover && popover.classList.contains('show')) {
+                        if (!popover.contains(e.target) && e.target !== railInfo && !railInfo.contains(e.target)) {
+                            popover.classList.remove('show');
+                            railInfo.classList.remove('active');
+                            this._setInfoOpen(false);
+                            if (!this.activePanel) this._collapseRail();
+                        }
+                    }
+                });
+
+                document.addEventListener('pointerdown', (e) => {
+                    const modal = this.els.colorPickerModal;
+                    if (!modal.classList.contains('show')) return;
+                    const popup = modal.querySelector('.modal');
+                    if (popup && !popup.contains(e.target)) this.closeColorPicker();
+                }, { capture: true });
+
+
+                document.addEventListener('keydown', (e) => {
+                    if ((e.ctrlKey || e.metaKey) && e.key === 'z') {
+                        e.preventDefault();
+                        if (e.shiftKey) {
+                            this.redo();
+                        } else {
+                            this.undo();
+                        }
+                    }
+                });
+
+                const ro = new ResizeObserver(() => this._onLayoutChange());
+                ro.observe(this.els.canvasContainer);
+
+                let _lastUiTap = 0;
+                let _uiWasMultiTouch = false;
+                document.addEventListener('touchstart', (e) => {
+                    if (container.contains(e.target)) return;
+                    if (e.touches.length > 1) _uiWasMultiTouch = true;
+                }, { passive: true });
+                document.addEventListener('touchend', (e) => {
+                    if (container.contains(e.target)) return;
+                    if (e.touches.length === 0) {
+                        if (_uiWasMultiTouch) { _uiWasMultiTouch = false; return; }
+                    }
+                    const now = Date.now();
+                    if (now - _lastUiTap < 320) {
+                        e.preventDefault();
+                    }
+                    _lastUiTap = now;
+                }, { passive: false });
+            },
+
+            saveState() {
+                this.history = this.history.slice(0, this.historyIndex + 1);
+                
+                const state = {
+                    rows: this.rows,
+                    cols: this.cols,
+                    colors: JSON.parse(JSON.stringify(this.colors)),
+                    anchors: JSON.parse(JSON.stringify(this.anchors))
+                };
+                
+                this.history.push(state);
+                
+                if (this.history.length > this.maxHistory) {
+                    this.history.shift();
+                } else {
+                    this.historyIndex++;
+                }
+                
+                this.updateUndoRedoButtons();
+            },
+
+            undo() {
+                if (this.historyIndex > 0) {
+                    this.historyIndex--;
+                    this.restoreState(this.history[this.historyIndex]);
+                }
+                this.updateUndoRedoButtons();
+            },
+
+            redo() {
+                if (this.historyIndex < this.history.length - 1) {
+                    this.historyIndex++;
+                    this.restoreState(this.history[this.historyIndex]);
+                }
+                this.updateUndoRedoButtons();
+            },
+
+            updateUndoRedoButtons() {
+                const undoBtn = this.els.undoBtn;
+                const redoBtn = this.els.redoBtn;
+                
+                if (undoBtn) {
+                    undoBtn.disabled = this.historyIndex <= 0;
+                }
+                
+                if (redoBtn) {
+                    redoBtn.disabled = this.historyIndex >= this.history.length - 1;
+                }
+            },
+
+            restoreState(state) {
+                this.rows = state.rows;
+                this.cols = state.cols;
+                this.colors = JSON.parse(JSON.stringify(state.colors));
+                this.anchors = JSON.parse(JSON.stringify(state.anchors));
+                
+                this.els.rowsInput.value = this.rows;
+                this.els.colsInput.value = this.cols;
+                
+                this.updateColorList();
+                this.updateGridButtons();
+                this._onLayoutChange();
+            },
+
+            setGridSize(rows, cols) {
+                rows = Math.max(3, Math.min(15, rows));
+                cols = Math.max(3, Math.min(15, cols));
+                
+                this.rows = rows;
+                this.cols = cols;
+                
+                this.els.rowsInput.value = rows;
+                this.els.colsInput.value = cols;
+                
+                const updatedAnchors = [];
+                for (const anchor of this.anchors) {
+                    if (anchor.row < rows && anchor.col < cols) {
+                        updatedAnchors.push(anchor);
+                    } else {
+                        const newRow = Math.min(anchor.row, rows - 1);
+                        const newCol = Math.min(anchor.col, cols - 1);
+                        
+                        const occupied = updatedAnchors.find(a => a.row === newRow && a.col === newCol);
+                        if (!occupied) {
+                            updatedAnchors.push({
+                                row: newRow,
+                                col: newCol,
+                                colorIndex: anchor.colorIndex
+                            });
+                        }
+                    }
+                }
+                
+                this.anchors = updatedAnchors;
+                this.updateGridButtons();
+                this.saveState();
+                this._onLayoutChange();
+            },
+
+            addRow() {
+                if (this.rows < 15) {
+                    this.setGridSize(this.rows + 1, this.cols);
+                }
+            },
+
+            removeRow() {
+                if (this.rows > 3) {
+                    const anchorRows = new Set(this.anchors.map(a => a.row));
+                    const anchorFreeRows = [];
+                    
+                    for (let row = 0; row < this.rows; row++) {
+                        if (!anchorRows.has(row)) {
+                            anchorFreeRows.push(row);
+                        }
+                    }
+                    
+                    let rowToRemove;
+                    if (anchorFreeRows.length > 0) {
+                        rowToRemove = Math.max(...anchorFreeRows);
+                    } else {
+                        rowToRemove = this.rows - 1;
+                        
+                        this.removeAnchorsInRow(rowToRemove);
+                    }
+                    
+                    this.anchors.forEach(a => {
+                        if (a.row > rowToRemove) {
+                            a.row--;
+                        }
+                    });
+                    
+                    this.rows--;
+                    this.els.rowsInput.value = this.rows;
+                    this.saveState();
+                    this.updateGridButtons();
+                    this._onLayoutChange();
+                }
+            },
+
+            addColumn() {
+                if (this.cols < 15) {
+                    this.setGridSize(this.rows, this.cols + 1);
+                }
+            },
+
+            removeColumn() {
+                if (this.cols > 3) {
+                    const anchorCols = new Set(this.anchors.map(a => a.col));
+                    const anchorFreeCols = [];
+                    
+                    for (let col = 0; col < this.cols; col++) {
+                        if (!anchorCols.has(col)) {
+                            anchorFreeCols.push(col);
+                        }
+                    }
+                    
+                    let colToRemove;
+                    if (anchorFreeCols.length > 0) {
+                        colToRemove = Math.max(...anchorFreeCols);
+                    } else {
+                        colToRemove = this.cols - 1;
+                        
+                        this.removeAnchorsInColumn(colToRemove);
+                    }
+                    
+                    this.anchors.forEach(a => {
+                        if (a.col > colToRemove) {
+                            a.col--;
+                        }
+                    });
+                    
+                    this.cols--;
+                    this.els.colsInput.value = this.cols;
+                    this.saveState();
+                    this.updateGridButtons();
+                    this._onLayoutChange();
+                }
+            },
+
+            updateGridButtons() {
+                const addRowBtn = this.els.addRowBtn;
+                const removeRowBtn = this.els.removeRowBtn;
+                const addColBtn = this.els.addColBtn;
+                const removeColBtn = this.els.removeColBtn;
+                
+                if (addRowBtn) addRowBtn.disabled = this.rows >= 15;
+                if (removeRowBtn) removeRowBtn.disabled = this.rows <= 3;
+                if (addColBtn) addColBtn.disabled = this.cols >= 15;
+                if (removeColBtn) removeColBtn.disabled = this.cols <= 3;
+            },
+
+            removeAnchorsInRow(row) {
+                const anchorsToRemove = this.anchors.filter(a => a.row === row);
+                
+                const colorIndicesToRemove = anchorsToRemove.map(a => a.colorIndex);
+                
+                colorIndicesToRemove.sort((a, b) => b - a);
+                for (const colorIndex of colorIndicesToRemove) {
+                    this.colors.splice(colorIndex, 1);
+                    
+                    this.anchors.forEach(a => {
+                        if (a.colorIndex > colorIndex) {
+                            a.colorIndex--;
+                        }
+                    });
+                }
+                
+                this.anchors = this.anchors.filter(a => a.row !== row);
+                
+                this.updateColorList();
+            },
+
+            removeAnchorsInColumn(col) {
+                const anchorsToRemove = this.anchors.filter(a => a.col === col);
+                
+                const colorIndicesToRemove = anchorsToRemove.map(a => a.colorIndex);
+                
+                colorIndicesToRemove.sort((a, b) => b - a);
+                for (const colorIndex of colorIndicesToRemove) {
+                    this.colors.splice(colorIndex, 1);
+                    
+                    this.anchors.forEach(a => {
+                        if (a.colorIndex > colorIndex) {
+                            a.colorIndex--;
+                        }
+                    });
+                }
+                
+                this.anchors = this.anchors.filter(a => a.col !== col);
+                
+                this.updateColorList();
+            },
+
+            placeDefaultAnchors() {
+                this.anchors = [];
+                const positions = this.getDefaultPositions();
+
+                for (let i = 0; i < Math.min(this.colors.length, positions.length); i++) {
+                    this.anchors.push({
+                        row: positions[i].row,
+                        col: positions[i].col,
+                        colorIndex: i
+                    });
+                }
+            },
+
+            getAnchorAt(x, y) {
+                const tolerance = this.cellSize * 0.35;
+                for (const anchor of this.anchors) {
+                    const anchorX = anchor.col * this.cellSize + this.cellSize / 2;
+                    const anchorY = anchor.row * this.cellSize + this.cellSize / 2;
+                    const dist = Math.sqrt((x - anchorX) ** 2 + (y - anchorY) ** 2);
+                    if (dist < tolerance) {
+                        return anchor;
+                    }
+                }
+                return null;
+            },
+
+            computeGridColors() {
+                this.gridData = this.computeExportGrid(this.rows, this.cols);
+            },
+
+            render() {
+                this.computeGridColors();
+                const ns  = this.svgNs;
+                const cs  = this.cellSize;
+                const W   = this.cols * cs;
+                const H   = this.rows * cs;
+
+                const cellCount = this.gridData.length;
+                const existingCells = this.cellLayer.children;
+
+                while (this.cellLayer.children.length < cellCount) {
+                    const r = document.createElementNS(ns, 'rect');
+                    this.cellLayer.appendChild(r);
+                }
+                while (this.cellLayer.children.length > cellCount) {
+                    this.cellLayer.removeChild(this.cellLayer.lastChild);
+                }
+                for (let i = 0; i < cellCount; i++) {
+                    const cell = this.gridData[i];
+                    const r = this.cellLayer.children[i];
+                    r.setAttribute('x',      cell.col * cs);
+                    r.setAttribute('y',      cell.row * cs);
+                    r.setAttribute('width',  cs);
+                    r.setAttribute('height', cs);
+                    r.setAttribute('fill', `rgb(${cell.r},${cell.g},${cell.b})`);
+                }
+
+                const lineCount = (this.cols + 1) + (this.rows + 1);
+                while (this.lineLayer.children.length < lineCount) {
+                    const l = document.createElementNS(ns, 'line');
+                    l.setAttribute('stroke', 'rgba(255,255,255,0.15)');
+                    l.setAttribute('stroke-width', '1');
+                    l.setAttribute('vector-effect', 'non-scaling-stroke');
+                    l.setAttribute('shape-rendering', 'crispEdges');
+                    this.lineLayer.appendChild(l);
+                }
+                while (this.lineLayer.children.length > lineCount) {
+                    this.lineLayer.removeChild(this.lineLayer.lastChild);
+                }
+                let li = 0;
+                for (let i = 0; i <= this.cols; i++, li++) {
+                    const l = this.lineLayer.children[li];
+                    l.setAttribute('x1', i * cs); l.setAttribute('y1', 0);
+                    l.setAttribute('x2', i * cs); l.setAttribute('y2', H);
+                }
+                for (let i = 0; i <= this.rows; i++, li++) {
+                    const l = this.lineLayer.children[li];
+                    l.setAttribute('x1', 0);   l.setAttribute('y1', i * cs);
+                    l.setAttribute('x2', W);   l.setAttribute('y2', i * cs);
+                }
+
+                const anchorCount = this.anchors.length;
+                while (this.anchorLayer.children.length < anchorCount) {
+                    const g = document.createElementNS(ns, 'g');
+                    const outer = document.createElementNS(ns, 'circle');
+                    outer.setAttribute('vector-effect', 'non-scaling-stroke');
+                    const fill  = document.createElementNS(ns, 'circle');
+                    fill.setAttribute('vector-effect', 'non-scaling-stroke');
+                    const inner = document.createElementNS(ns, 'circle');
+                    inner.setAttribute('fill', 'none');
+                    inner.setAttribute('vector-effect', 'non-scaling-stroke');
+                    g.appendChild(outer);
+                    g.appendChild(fill);
+                    g.appendChild(inner);
+                    this.anchorLayer.appendChild(g);
+                }
+                while (this.anchorLayer.children.length > anchorCount) {
+                    this.anchorLayer.removeChild(this.anchorLayer.lastChild);
+                }
+                for (let i = 0; i < anchorCount; i++) {
+                    const anchor = this.anchors[i];
+                    const g      = this.anchorLayer.children[i];
+                    const isHigh = this.highlightedAnchorIndex === anchor.colorIndex;
+                    const radius = cs * (isHigh ? 0.33 : 0.30);
+                    const cx     = anchor.col * cs + cs / 2;
+                    const cy     = anchor.row * cs + cs / 2;
+                    const hex    = this.colors[anchor.colorIndex].hex;
+
+                    const [outer, fill, inner] = g.children;
+                    outer.setAttribute('cx', cx); outer.setAttribute('cy', cy);
+                    outer.setAttribute('r',  radius + 1.5);
+                    outer.setAttribute('fill', 'none');
+                    outer.setAttribute('stroke', 'rgba(0,0,0,0.55)');
+                    outer.setAttribute('stroke-width', '3');
+                    fill.setAttribute('cx', cx); fill.setAttribute('cy', cy);
+                    fill.setAttribute('r',  radius);
+                    fill.setAttribute('fill', hex);
+                    fill.setAttribute('stroke', 'none');
+                    inner.setAttribute('cx', cx); inner.setAttribute('cy', cy);
+                    inner.setAttribute('r',  radius - 2);
+                    inner.setAttribute('stroke', isHigh ? 'rgba(255,255,255,0.9)' : 'rgba(255,255,255,0.6)');
+                    inner.setAttribute('stroke-width', '1.5');
+                }
+
+                this._applyViewBox();
+            },
+
+            updateTooltip(clientX, clientY, x, y) {
+                const col = Math.floor(x / this.cellSize);
+                const row = Math.floor(y / this.cellSize);
+                
+                if (col >= 0 && col < this.cols && row >= 0 && row < this.rows) {
+                    const cell = this.gridData.find(c => c.row === row && c.col === col);
+                    if (cell) {
+                        const tooltip = this.els.tooltip;
+                        tooltip.textContent = '';
+                        const s = document.createElement('strong'); s.textContent = cell.hex; tooltip.appendChild(s);
+                        tooltip.appendChild(document.createTextNode(`\u00A0RGB(${cell.r}, ${cell.g}, ${cell.b})`));
+                        tooltip.classList.add('show');
+                        const pad = 8;
+                        const tr = tooltip.getBoundingClientRect();
+                        let tx = clientX + 15;
+                        let ty = clientY + 15;
+                        if (tx + tr.width > window.innerWidth - pad) tx = clientX - tr.width - 10;
+                        if (ty + tr.height > window.innerHeight - pad) ty = clientY - tr.height - 10;
+                        if (tx < pad) tx = pad;
+                        if (ty < pad) ty = pad;
+                        tooltip.style.left = tx + 'px';
+                        tooltip.style.top = ty + 'px';
+                    }
+                } else {
+                    this.els.tooltip.classList.remove('show');
+                }
+            },
+
+            updateColorList() {
+                const list = this.els.colorList;
+                list.innerHTML = '';
+                
+                this.colors.forEach((color, index) => {
+                    const item = document.createElement('div');
+                    item.className = 'color-item';
+                    item.dataset.colorIndex = index;
+                    
+                    const rgb = this.hexToRgb(color.hex);
+                    
+                    item.innerHTML = `
+                        <div class="color-swatch-wrapper">
+                            <div class="color-swatch-frame">
+                                <div class="color-swatch-fill" style="background-color: ${color.hex};"></div>
+                            </div>
+                            <input type="color" class="color-swatch-input" value="${color.hex}" 
+                                   onchange="app.updateColorPicker(${index}, this.value)">
+                        </div>
+                        <div class="color-inputs">
+                            <input type="text" value="${color.hex}" 
+                                   oninput="app.updateColorHex(${index}, this.value)">
+                            <input type="text" value="${rgb.r}, ${rgb.g}, ${rgb.b}" 
+                                   oninput="app.updateColorRgb(${index}, this.value)">
+                        </div>
+                        ${this.colors.length > 1 ? `<button class="btn-remove" onclick="app.removeColor(${index})">×</button>` : ''}
+                    `;
+                    
+                    item.addEventListener('mouseenter', () => {
+                        this.highlightedAnchorIndex = index;
+                        this.render();
+                    });
+                    
+                    item.addEventListener('mouseleave', () => {
+                        if (this.highlightedAnchorIndex === index && !item.querySelector(':focus')) {
+                            this.highlightedAnchorIndex = null;
+                            this.render();
+                        }
+                    });
+                    
+                    const inputs = item.querySelectorAll('input');
+                    inputs.forEach(input => {
+                        input.addEventListener('focus', () => {
+                            this.highlightedAnchorIndex = index;
+                            this.render();
+                        });
+                        
+                        input.addEventListener('blur', () => {
+                            setTimeout(() => {
+                                if (!item.querySelector(':focus')) {
+                                    this.highlightedAnchorIndex = null;
+                                    this.render();
+                                }
+                            }, 10);
+                        });
+                    });
+                    
+                    list.appendChild(item);
+                });
+
+                const addBtn = this.els.addColorBtn;
+                addBtn.disabled = this.colors.length >= 9;
+            },
+
+            updateColorPicker(index, value) {
+                const hex = value.toUpperCase();
+                this.colors[index].hex = hex;
+                this._syncColorRow(index);
+                this.saveState();
+                this.render();
+            },
+
+            updateColorHex(index, value) {
+                let hex = value.trim();
+                if (!hex.startsWith('#')) hex = '#' + hex;
+                hex = hex.toUpperCase();
+                if (/^#[0-9A-F]{6}$/i.test(hex)) {
+                    this.colors[index].hex = hex;
+                    this._syncColorRow(index, /* skipHex */ true);
+                    this.saveState();
+                    this.render();
+                }
+            },
+
+            updateColorRgb(index, value) {
+                const parts = value.split(',').map(v => parseInt(v.trim()));
+                if (parts.length === 3 && parts.every(v => !isNaN(v) && v >= 0 && v <= 255)) {
+                    const hex = this.rgbToHex(parts[0], parts[1], parts[2]);
+                    this.colors[index].hex = hex;
+                    this._syncColorRow(index, /* skipHex */ false, /* skipRgb */ true);
+                    this.saveState();
+                    this.render();
+                }
+            },
+
+            _syncColorRow(index, skipHex = false, skipRgb = false) {
+                const list = this.els.colorList;
+                const item = list.querySelector(`[data-color-index="${index}"]`);
+                if (!item) return;
+                const hex = this.colors[index].hex;
+                const rgb = this.hexToRgb(hex);
+                const swatchInput = item.querySelector('.color-swatch-input');
+                if (swatchInput) swatchInput.value = hex;
+                const swatchFill = item.querySelector('.color-swatch-fill');
+                if (swatchFill) swatchFill.style.backgroundColor = hex;
+                if (!skipHex) {
+                    const hexInput = item.querySelectorAll('.color-inputs input')[0];
+                    if (hexInput && hexInput !== document.activeElement) hexInput.value = hex;
+                }
+                if (!skipRgb) {
+                    const rgbInput = item.querySelectorAll('.color-inputs input')[1];
+                    if (rgbInput && rgbInput !== document.activeElement)
+                        rgbInput.value = `${rgb.r}, ${rgb.g}, ${rgb.b}`;
+                }
+            },
+
+            addColor() {
+                if (this.colors.length < 9) {
+                    const newColorIndex = this.colors.length;
+                    this.colors.push({ hex: '#FFFFFF' });
+                    
+                    const positions = this.getDefaultPositions();
+                    let placed = false;
+                    
+                    for (const pos of positions) {
+                        const occupied = this.anchors.some(a => a.row === pos.row && a.col === pos.col);
+                        if (!occupied) {
+                            this.anchors.push({
+                                row: pos.row,
+                                col: pos.col,
+                                colorIndex: newColorIndex
+                            });
+                            placed = true;
+                            break;
+                        }
+                    }
+                    
+                    if (!placed) {
+                        for (let row = 0; row < this.rows; row++) {
+                            for (let col = 0; col < this.cols; col++) {
+                                const occupied = this.anchors.some(a => a.row === row && a.col === col);
+                                if (!occupied) {
+                                    this.anchors.push({
+                                        row: row,
+                                        col: col,
+                                        colorIndex: newColorIndex
+                                    });
+                                    placed = true;
+                                    break;
+                                }
+                            }
+                            if (placed) break;
+                        }
+                    }
+                    
+                    this.updateColorList();
+                    this.saveState();
+                    this.render();
+                }
+            },
+
+            removeColor(index) {
+                if (this.colors.length > 1) {
+                    this.colors.splice(index, 1);
+                    this.anchors = this.anchors.filter(a => a.colorIndex !== index);
+                    this.anchors.forEach(a => {
+                        if (a.colorIndex > index) a.colorIndex--;
+                    });
+                    this.updateColorList();
+                    this.saveState();
+                    this.render();
+                }
+            },
+
+            getDefaultPositions() {
+                const mid = (val) => Math.floor(val / 2);
+                return [
+                    { row: 0, col: 0 },
+                    { row: 0, col: this.cols - 1 },
+                    { row: this.rows - 1, col: 0 },
+                    { row: this.rows - 1, col: this.cols - 1 },
+                    { row: mid(this.rows), col: mid(this.cols) },
+                    { row: 0, col: mid(this.cols) },
+                    { row: this.rows - 1, col: mid(this.cols) },
+                    { row: mid(this.rows), col: 0 },
+                    { row: mid(this.rows), col: this.cols - 1 }
+                ];
+            },
+
+            closeGenerateModal() {
+                this.els.generateModal.classList.remove('show');
+            },
+
+            updateHarmonyLimits() {
+                const type = this.els.modalHarmonyType.value;
+                const countInput = this.els.modalColorCount;
+                const hint = this.els.colorLimitHint;
+                
+                let maxColors;
+                switch (type) {
+                    case 'complementary':
+                        maxColors = 6;
+                        hint.textContent = '(max 6 for balanced distribution)';
+                        break;
+                    case 'split-complementary':
+                        maxColors = 6;
+                        hint.textContent = '(max 6 for balanced distribution)';
+                        break;
+                    case 'triadic':
+                        maxColors = 6;
+                        hint.textContent = '(max 6 for balanced distribution)';
+                        break;
+                    case 'monochrome':
+                        maxColors = 9;
+                        hint.textContent = '(max 9)';
+                        break;
+                }
+                
+                countInput.max = maxColors;
+                
+                if (parseInt(countInput.value) > maxColors) {
+                    countInput.value = maxColors;
+                }
+                
+                this.updatePalettePreview();
+            },
+
+            updateBaseColorFromPicker() {
+                const hex = this.els.modalBaseColor.value.toUpperCase();
+                const rgb = this.hexToRgb(hex);
+                this.els.modalBaseHex.value = hex;
+                this.els.modalBaseRgb.value = `${rgb.r}, ${rgb.g}, ${rgb.b}`;
+                this.updatePalettePreview();
+            },
+
+            updateBaseColorFromHex() {
+                let hex = this.els.modalBaseHex.value.trim().toUpperCase();
+                if (!hex.startsWith('#')) hex = '#' + hex;
+                if (/^#[0-9A-F]{6}$/i.test(hex)) {
+                    const rgb = this.hexToRgb(hex);
+                    this.els.modalBaseColor.value = hex;
+                    this.els.modalBaseHex.value = hex;
+                    this.els.modalBaseRgb.value = `${rgb.r}, ${rgb.g}, ${rgb.b}`;
+                    this.updatePalettePreview();
+                }
+            },
+
+            updateBaseColorFromRgb() {
+                const parts = this.els.modalBaseRgb.value.split(',').map(v => parseInt(v.trim()));
+                if (parts.length === 3 && parts.every(v => v >= 0 && v <= 255)) {
+                    const hex = this.rgbToHex(parts[0], parts[1], parts[2]);
+                    this.els.modalBaseColor.value = hex;
+                    this.els.modalBaseHex.value = hex;
+                    this.updatePalettePreview();
+                }
+            },
+
+            updatePalettePreview() {
+                const count = parseInt(this.els.modalColorCount.value);
+                const type = this.els.modalHarmonyType.value;
+                const baseColor = this.els.modalBaseColor.value;
+                
+                const previewColors = this.generatePaletteColors(count, type, baseColor);
+                
+                const preview = this.els.palettePreview;
+                preview.innerHTML = '';
+                
+                previewColors.forEach(color => {
+                    const swatch = document.createElement('div');
+                    swatch.style.flex = '1';
+                    swatch.style.backgroundColor = color;
+                    swatch.style.borderRadius = '4px';
+                    swatch.style.border = '1px solid rgba(255,255,255,0.12)';
+                    preview.appendChild(swatch);
+                });
+            },
+
+            rgbToOklch(r, g, b) {
+                r = r / 255;
+                g = g / 255;
+                b = b / 255;
+                
+                const toLinear = (c) => {
+                    return c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
+                };
+                
+                const lr = toLinear(r);
+                const lg = toLinear(g);
+                const lb = toLinear(b);
+                
+                const l = 0.4122214708 * lr + 0.5363325363 * lg + 0.0514459929 * lb;
+                const m = 0.2119034982 * lr + 0.6806995451 * lg + 0.1073969566 * lb;
+                const s = 0.0883024619 * lr + 0.2817188376 * lg + 0.6299787005 * lb;
+                
+                const l_ = Math.cbrt(l);
+                const m_ = Math.cbrt(m);
+                const s_ = Math.cbrt(s);
+                
+                const L = 0.2104542553 * l_ + 0.7936177850 * m_ - 0.0040720468 * s_;
+                const a = 1.9779984951 * l_ - 2.4285922050 * m_ + 0.4505937099 * s_;
+                const b_lab = 0.0259040371 * l_ + 0.7827717662 * m_ - 0.8086757660 * s_;
+                
+                const C = Math.sqrt(a * a + b_lab * b_lab);
+                let H = Math.atan2(b_lab, a) * 180 / Math.PI;
+                if (H < 0) H += 360;
+                
+                return { l: L, c: C, h: H };
+            },
+            
+            oklchToRgb(l, c, h) {
+                const a = c * Math.cos(h * Math.PI / 180);
+                const b = c * Math.sin(h * Math.PI / 180);
+                
+                const l_ = l + 0.3963377774 * a + 0.2158037573 * b;
+                const m_ = l - 0.1055613458 * a - 0.0638541728 * b;
+                const s_ = l - 0.0894841775 * a - 1.2914855480 * b;
+                
+                const l_cubed = l_ * l_ * l_;
+                const m_cubed = m_ * m_ * m_;
+                const s_cubed = s_ * s_ * s_;
+                
+                let lr = +4.0767416621 * l_cubed - 3.3077115913 * m_cubed + 0.2309699292 * s_cubed;
+                let lg = -1.2684380046 * l_cubed + 2.6097574011 * m_cubed - 0.3413193965 * s_cubed;
+                let lb = -0.0041960863 * l_cubed - 0.7034186147 * m_cubed + 1.7076147010 * s_cubed;
+                
+                const toSrgb = (c) => {
+                    return c <= 0.0031308 ? 12.92 * c : 1.055 * Math.pow(c, 1 / 2.4) - 0.055;
+                };
+                
+                let r = toSrgb(lr);
+                let g = toSrgb(lg);
+                let b_val = toSrgb(lb);
+                
+                r = Math.max(0, Math.min(1, r));
+                g = Math.max(0, Math.min(1, g));
+                b_val = Math.max(0, Math.min(1, b_val));
+                
+                return {
+                    r: Math.round(r * 255),
+                    g: Math.round(g * 255),
+                    b: Math.round(b_val * 255)
+                };
+            },
+
+            generatePaletteColors(count, type, baseColor) {
+                const baseRgb = this.hexToRgb(baseColor);
+                const baseOklch = this.rgbToOklch(baseRgb.r, baseRgb.g, baseRgb.b);
+                const baseL = baseOklch.l;
+                const baseC = baseOklch.c;
+                const baseH = baseOklch.h;
+                
+                const colors = [];
+                
+                if (type === 'monochrome') {
+                    const minL = Math.max(0.2, baseL - 0.3);
+                    const maxL = Math.min(0.9, baseL + 0.3);
+                    
+                    for (let i = 0; i < count; i++) {
+                        if (i === 0) {
+                            colors.push(baseColor);
+                        } else {
+                            const t = i / (count - 1);
+                            const l = minL + (maxL - minL) * t;
+                            const chromaDelta = Math.abs(l - baseL) * 0.3;
+                            const c = Math.max(0, baseC - chromaDelta);
+                            
+                            const rgb = this.oklchToRgb(l, c, baseH);
+                            colors.push(this.rgbToHex(rgb.r, rgb.g, rgb.b));
+                        }
+                    }
+                } else {
+                    let coreHues = [];
+                    switch (type) {
+                        case 'complementary':
+                            coreHues = [baseH, (baseH + 180) % 360];
+                            break;
+                        case 'split-complementary':
+                            coreHues = [baseH, (baseH + 150) % 360, (baseH + 210) % 360];
+                            break;
+                        case 'triadic':
+                            coreHues = [baseH, (baseH + 120) % 360, (baseH + 240) % 360];
+                            break;
+                    }
+                    
+                    coreHues = coreHues.map(h => ((h % 360) + 360) % 360);
+                    
+                    const numHues = coreHues.length;
+                    const variationsPerHue = Math.ceil(count / numHues);
+                    
+                    for (let hueIndex = 0; hueIndex < numHues; hueIndex++) {
+                        const hue = coreHues[hueIndex];
+                        
+                        const startIdx = hueIndex * variationsPerHue;
+                        const endIdx = Math.min((hueIndex + 1) * variationsPerHue, count);
+                        const numVariations = endIdx - startIdx;
+                        
+                        for (let varIdx = 0; varIdx < numVariations; varIdx++) {
+                            const globalIdx = startIdx + varIdx;
+                            
+                            if (globalIdx === 0) {
+                                colors.push(baseColor);
+                            } else {
+                                let l, c;
+                                
+                                if (numVariations === 1) {
+                                    l = baseL;
+                                    c = baseC;
+                                } else {
+                                    const t = varIdx / (numVariations - 1);
+                                    
+                                    const minL = Math.max(0.25, baseL - 0.25);
+                                    const maxL = Math.min(0.85, baseL + 0.25);
+                                    l = minL + (maxL - minL) * t;
+                                    
+                                    const chromaMultiplier = l > baseL ? 0.85 : 0.95;
+                                    c = baseC * chromaMultiplier;
+                                }
+                                
+                                l = Math.max(0.2, Math.min(0.9, l));
+                                c = Math.max(0, Math.min(0.4, c));
+                                
+                                const rgb = this.oklchToRgb(l, c, hue);
+                                colors.push(this.rgbToHex(rgb.r, rgb.g, rgb.b));
+                            }
+                        }
+                    }
+                }
+                
+                return colors;
+            },
+
+            generateRandomPalette() {
+                const colorCount = Math.floor(Math.random() * 7) + 2; // 2-8
+                
+                const harmonyTypes = ['complementary', 'triadic', 'split-complementary', 'monochrome'];
+                const randomHarmony = harmonyTypes[Math.floor(Math.random() * harmonyTypes.length)];
+                
+                const baseR = Math.floor(Math.random() * 256);
+                const baseG = Math.floor(Math.random() * 256);
+                const baseB = Math.floor(Math.random() * 256);
+                const baseHex = this.rgbToHex(baseR, baseG, baseB);
+                
+                const generatedColors = this.generatePaletteColors(colorCount, randomHarmony, baseHex);
+                
+                this.colors = generatedColors.map(hex => ({ hex }));
+
+                this.placeDefaultAnchors();
+                this.updateColorList();
+                this.saveState();
+                this.render();
+            },
+
+            showGenerateModal() {
+                if (this.colors.length > 0) {
+                    const baseColor = this.colors[0].hex;
+                    this.els.modalBaseColor.value = baseColor;
+                    this.els.modalBaseHex.value = baseColor;
+                    const rgb = this.hexToRgb(baseColor);
+                    this.els.modalBaseRgb.value = `${rgb.r}, ${rgb.g}, ${rgb.b}`;
+                }
+                
+                this.els.generateModal.classList.add('show');
+                this.updateHarmonyLimits();
+                this.updatePalettePreview();
+            },
+
+            applyGeneratePalette() {
+                if (this.skipOverwriteWarning) {
+                    this.els.generateModal.classList.remove('show');
+                    this.executeGeneratePalette();
+                } else {
+                    this.pendingAction = 'generate-apply';
+                    this.els.generateModal.classList.remove('show');
+                    document.getElementById('confirmOverwriteModal').classList.add('show');
+                }
+            },
+
+            executeGeneratePalette() {
+                const count = parseInt(this.els.modalColorCount.value);
+                const type = this.els.modalHarmonyType.value;
+                const baseColor = this.els.modalBaseColor.value;
+                
+                const generatedColors = this.generatePaletteColors(count, type, baseColor);
+                this.colors = generatedColors.map(hex => ({ hex }));
+                
+                this.placeDefaultAnchors();
+                this.updateColorList();
+                this.saveState();
+                this.render();
+            },
+
+            checkAndRandom() {
+                if (this.skipOverwriteWarning) {
+                    this.generateRandomPalette();
+                } else {
+                    this.pendingAction = 'random';
+                    this.els.confirmOverwriteModal.classList.add('show');
+                }
+            },
+
+            confirmOverwrite() {
+                if (this.els.rememberOverwriteChoice.checked) {
+                    this.skipOverwriteWarning = true;
+                }
+                
+                if (this.pendingAction === 'generate-apply') {
+                    this.executeGeneratePalette();
+                } else if (this.pendingAction === 'random') {
+                    this.generateRandomPalette();
+                }
+                
+                this.closeOverwriteModal();
+            },
+
+            cancelOverwrite() {
+                if (this.pendingAction === 'generate-apply') {
+                    this.closeOverwriteModal();
+                    this.els.generateModal.classList.add('show');
+                } else {
+                    this.closeOverwriteModal();
+                }
+            },
+
+            closeOverwriteModal() {
+                this.els.confirmOverwriteModal.classList.remove('show');
+                this.pendingAction = null;
+                this.els.rememberOverwriteChoice.checked = false;
+            },
+
+            showExportModal(format) {
+                this.pendingExportFormat = format;
+                this.els.exportModal.classList.add('show');
+            },
+
+            closeExportModal() {
+                this.els.exportModal.classList.remove('show');
+                this.pendingExportFormat = null;
+            },
+
+            executeExport() {
+                if (this.pendingExportFormat === 'png') {
+                    this.exportPNG();
+                } else if (this.pendingExportFormat === 'svg') {
+                    this.exportSVG();
+                }
+                this.closeExportModal();
+            },
+
+            openColorPicker(anchor) {
+                this.editingAnchor = anchor;
+                const color = this.colors[anchor.colorIndex];
+                const rgb = this.hexToRgb(color.hex);
+
+                const nativeInput = this.els.anchorColorNative;
+                const hexInput    = this.els.anchorColorHex;
+                const rInput      = this.els.anchorColorR;
+                const gInput      = this.els.anchorColorG;
+                const bInput      = this.els.anchorColorB;
+                const swatch      = this.els.colorPickerSwatch;
+
+                const setAll = (hex) => {
+                    const clean = hex.startsWith('#') ? hex : '#' + hex;
+                    const r = this.hexToRgb(clean);
+                    hexInput.value    = clean.toUpperCase();
+                    nativeInput.value = clean;
+                    rInput.value = r.r; gInput.value = r.g; bInput.value = r.b;
+                    swatch.style.background = clean;
+                };
+
+                setAll(color.hex);
+
+                nativeInput.oninput = () => setAll(nativeInput.value);
+
+                hexInput.oninput = () => {
+                    let hex = hexInput.value.trim();
+                    if (!hex.startsWith('#')) hex = '#' + hex;
+                    if (/^#[0-9A-Fa-f]{6}$/.test(hex)) setAll(hex);
+                };
+
+                const fromRGB = () => {
+                    const r = Math.max(0, Math.min(255, parseInt(rInput.value) || 0));
+                    const g = Math.max(0, Math.min(255, parseInt(gInput.value) || 0));
+                    const b = Math.max(0, Math.min(255, parseInt(bInput.value) || 0));
+                    setAll(this.rgbToHex(r, g, b));
+                };
+                rInput.oninput = fromRGB;
+                gInput.oninput = fromRGB;
+                bInput.oninput = fromRGB;
+
+                swatch.onclick = () => nativeInput.click();
+
+
+                const popup = this.els.colorPickerModal.querySelector('.modal');
+                popup.style.left = '';
+                popup.style.top  = '';
+
+                let dragActive = false;
+                let dragOffX = 0, dragOffY = 0;
+
+                const onDragDown = (e) => {
+                    const tag = e.target.tagName.toLowerCase();
+                    if (['input','button','select','textarea','label','a'].includes(tag)) return;
+                    if (e.pointerType === 'mouse' && e.button !== 0) return;
+                    e.stopPropagation();
+                    const rect = popup.getBoundingClientRect();
+                    dragOffX = e.clientX - rect.left;
+                    dragOffY = e.clientY - rect.top;
+                    dragActive = true;
+                    popup.setPointerCapture(e.pointerId);
+                    popup.style.right = '';
+                    popup.style.bottom = '';
+                    popup.style.left = rect.left + 'px';
+                    popup.style.top  = rect.top  + 'px';
+                };
+
+                const onDragMove = (e) => {
+                    if (!dragActive) return;
+                    e.stopPropagation();
+                    const pw = popup.offsetWidth;
+                    const ph = popup.offsetHeight;
+                    let nx = e.clientX - dragOffX;
+                    let ny = e.clientY - dragOffY;
+                    nx = Math.max(8, Math.min(window.innerWidth  - pw - 8, nx));
+                    ny = Math.max(8, Math.min(window.innerHeight - ph - 8, ny));
+                    popup.style.left = nx + 'px';
+                    popup.style.top  = ny + 'px';
+                };
+
+                const onDragEnd = (e) => {
+                    if (!dragActive) return;
+                    e.stopPropagation();
+                    dragActive = false;
+                };
+
+                popup.addEventListener('pointerdown',   onDragDown);
+                popup.addEventListener('pointermove',   onDragMove);
+                popup.addEventListener('pointerup',     onDragEnd);
+                popup.addEventListener('pointercancel', onDragEnd);
+                this._cpDragCleanup = () => {
+                    popup.removeEventListener('pointerdown',   onDragDown);
+                    popup.removeEventListener('pointermove',   onDragMove);
+                    popup.removeEventListener('pointerup',     onDragEnd);
+                    popup.removeEventListener('pointercancel', onDragEnd);
+                };
+
+                this.els.colorPickerModal.classList.add('show');
+                setTimeout(() => hexInput.select(), 50);
+            },
+
+            closeColorPicker() {
+                this.editingAnchor = null;
+                this.els.colorPickerModal.classList.remove('show');
+                if (this._cpDragCleanup) { this._cpDragCleanup(); this._cpDragCleanup = null; }
+            },
+
+            applyColorPicker() {
+                if (this.editingAnchor) {
+                    let newHex = this.els.anchorColorHex.value.trim().toUpperCase();
+                    if (!newHex.startsWith('#')) newHex = '#' + newHex;
+                    if (!/^#[0-9A-F]{6}$/.test(newHex)) { this.closeColorPicker(); return; }
+                    this.colors[this.editingAnchor.colorIndex].hex = newHex;
+                    this.updateColorList();
+                    this.saveState();
+                    this.render();
+                }
+                this.closeColorPicker();
+            },
+
+            deleteEditingAnchor() {
+                if (this.editingAnchor) {
+                    this.anchors = this.anchors.filter(a => a !== this.editingAnchor);
+                    this.closeColorPicker();
+                    this.saveState();
+                    this.updateColorList();
+                    this.render();
+                }
+            },
+
+            _computeFitScale() {
+                const container = this.els.canvasContainer;
+                const pad = 40;
+                const availW = container.clientWidth  - pad;
+                const availH = container.clientHeight - pad;
+                const naturalW = this.cols * this.cellSize;
+                const naturalH = this.rows * this.cellSize;
+
+                const rawScale = Math.min(availW / naturalW, availH / naturalH);
+
+                const isSmallGrid = this.cols < this.SMALL_GRID_THRESHOLD ||
+                                    this.rows < this.SMALL_GRID_THRESHOLD;
+                let maxScale;
+                if (isSmallGrid) {
+                    const occupancyScale = Math.min(
+                        availW * this.FIT_OCCUPANCY / naturalW,
+                        availH * this.FIT_OCCUPANCY / naturalH
+                    );
+                    maxScale = Math.min(occupancyScale, this.FIT_MAX_SCALE);
+                } else {
+                    maxScale = 4.0;
+                }
+
+                return Math.min(Math.max(rawScale, 0.1), maxScale);
+            },
+
+            _applyViewBox() {
+                const container = this.els.canvasContainer;
+                const cw = container.clientWidth;
+                const ch = container.clientHeight;
+                const naturalW = this.cols * this.cellSize;
+                const naturalH = this.rows * this.cellSize;
+
+                const vbW = cw  / this.zoomScale;
+                const vbH = ch  / this.zoomScale;
+                const vbX = -this.pan.x / this.zoomScale;
+                const vbY = -this.pan.y / this.zoomScale;
+
+                this.svg.setAttribute('viewBox', `${vbX} ${vbY} ${vbW} ${vbH}`);
+                this._updateGridRect();
+            },
+
+            _centerCanvas() {
+                const container = this.els.canvasContainer;
+                const naturalW = this.cols * this.cellSize;
+                const naturalH = this.rows * this.cellSize;
+                this.pan.x = (container.clientWidth  - naturalW * this.zoomScale) / 2;
+                this.pan.y = (container.clientHeight - naturalH * this.zoomScale) / 2;
+            },
+
+            enterFitMode() {
+                this.zoomMode = 'fit';
+                this.zoomScale = this._computeFitScale();
+                this._centerCanvas();
+                this._updateResetViewButton();
+                this.render();
+            },
+
+            enterFixedMode(pct) {
+                this.zoomMode = 'fixed';
+                this.zoomPercent = Math.max(10, Math.min(500, pct));
+                this.zoomScale = this.zoomPercent / 100;
+                this._centerCanvas();
+                this._updateResetViewButton();
+                this.render();
+            },
+
+            _onLayoutChange() {
+                if (this.zoomMode === 'fit') {
+                    this.zoomScale = this._computeFitScale();
+                    this._centerCanvas();
+                    this.render();
+                } else {
+                    this._applyViewBox();
+                }
+                this._updateResetViewButton();
+            },
+
+            _updateResetViewButton() {
+                const btn = this.els.resetViewBtn;
+                if (btn) btn.disabled = this.zoomMode === 'fit';
+            },
+
+            _updateGridRect() {
+                const rect = this.els.canvasContainer.getBoundingClientRect();
+                const naturalW = this.cols * this.cellSize;
+                const naturalH = this.rows * this.cellSize;
+                this.gridScreenRect = {
+                    left:   this.pan.x + rect.left,
+                    top:    this.pan.y + rect.top,
+                    right:  this.pan.x + naturalW * this.zoomScale + rect.left,
+                    bottom: this.pan.y + naturalH * this.zoomScale + rect.top,
+                };
+            },
+
+            _inGridRect(clientX, clientY) {
+                const r = this.gridScreenRect;
+                if (!r) return true;
+                return clientX >= r.left && clientX <= r.right &&
+                       clientY >= r.top  && clientY <= r.bottom;
+            },
+
+            sanitizeFilename(name) {
+                if (!name || !name.trim()) return 'palette';
+                return name.trim()
+                    .replace(/\s+/g, '-')
+                    .replace(/[/\\:*?"<>|]/g, '')
+                    .replace(/^\.+/, '')
+                    .slice(0, 200) || 'palette';
+            },
+
+            exportPNG() {
+                const exportCanvas = document.createElement('canvas');
+                const ctx = exportCanvas.getContext('2d');
+                
+                const rows = this.rows;
+                const cols = this.cols;
+                const showHex = this.els.showHexCheckbox.checked;
+                
+                const scale = 2;
+                const tileSize = 100 * scale;
+                const width = cols * tileSize;
+                const height = rows * tileSize;
+                
+                exportCanvas.width = width;
+                exportCanvas.height = height;
+                
+                const cellMap = new Map(this.gridData.map(c => [`${c.row},${c.col}`, c]));
+                for (let row = 0; row < rows; row++) {
+                    for (let col = 0; col < cols; col++) {
+                        const cell = cellMap.get(`${row},${col}`);
+                        if (!cell) continue;
+                        
+                        const hex = cell.hex;
+                        
+                        const x = col * tileSize;
+                        const y = row * tileSize;
+                        
+                        ctx.fillStyle = `rgb(${cell.r}, ${cell.g}, ${cell.b})`;
+                        ctx.fillRect(x, y, tileSize, tileSize);
+                        
+                        if (showHex) {
+                            const pillHeight = 24 * scale;
+                            const pillWidth = 90 * scale;
+                            const pillX = x + (tileSize - pillWidth) / 2;
+                            const pillY = y + (tileSize - pillHeight) / 2;
+                            
+                            ctx.fillStyle = 'rgba(255, 255, 255, 0.95)';
+                            ctx.fillRect(pillX, pillY, pillWidth, pillHeight);
+                            
+                            ctx.fillStyle = '#000';
+                            ctx.font = `600 ${11 * scale}px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif`;
+                            ctx.textAlign = 'center';
+                            ctx.textBaseline = 'middle';
+                            ctx.fillText(hex.toUpperCase(), pillX + pillWidth / 2, pillY + pillHeight / 2);
+                        }
+                    }
+                }
+                
+                try {
+                    const dataURL = exportCanvas.toDataURL('image/png');
+                    const a = document.createElement('a');
+                    a.href = dataURL;
+                    a.download = this.sanitizeFilename(this.exportFilename) + '.png';
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
+                } catch (err) {
+                    console.error('Export failed:', err);
+                    alert('Export failed. Please try a different browser or check your browser settings.');
+                }
+            },
+
+            exportSVG() {
+                const rows = this.rows;
+                const cols = this.cols;
+                const showHex = this.els.showHexCheckbox.checked;
+                
+                const tileSize = 100;
+                const width = cols * tileSize;
+                const height = rows * tileSize;
+                
+                let svg = `<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}">`;
+                
+                const cellMap = new Map(this.gridData.map(c => [`${c.row},${c.col}`, c]));
+                for (let row = 0; row < rows; row++) {
+                    for (let col = 0; col < cols; col++) {
+                        const cell = cellMap.get(`${row},${col}`);
+                        if (!cell) continue;
+                        
+                        const hex = cell.hex;
+                        
+                        const x = col * tileSize;
+                        const y = row * tileSize;
+                        
+                        svg += `<rect x="${x}" y="${y}" width="${tileSize}" height="${tileSize}" fill="${hex}"/>`;
+                        
+                        if (showHex) {
+                            const pillWidth = 90;
+                            const pillHeight = 24;
+                            const pillX = x + (tileSize - pillWidth) / 2;
+                            const pillY = y + (tileSize - pillHeight) / 2;
+                            
+                            svg += `<rect x="${pillX}" y="${pillY}" width="${pillWidth}" height="${pillHeight}" fill="#FFFFFF" fill-opacity="0.95"/>`;
+                            svg += `<text x="${pillX + pillWidth / 2}" y="${pillY + pillHeight / 2}" text-anchor="middle" dominant-baseline="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="11" font-weight="600" fill="#000000">${hex.toUpperCase()}</text>`;
+                        }
+                    }
+                }
+                
+                svg += '</svg>';
+                
+                try {
+                    const blob = new Blob([svg], { type: 'image/svg+xml;charset=utf-8' });
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = this.sanitizeFilename(this.exportFilename) + '.svg';
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
+                    
+                    setTimeout(() => URL.revokeObjectURL(url), 100);
+                } catch (err) {
+                    console.error('SVG export failed:', err);
+                    alert('SVG export failed: ' + err.message);
+                }
+            },
+
+            exportASE() {
+                try {
+                    const seen = new Set();
+                    const gridColors = [];
+                    
+                    for (const cell of this.gridData) {
+                        const hex = cell.hex;
+                        if (!seen.has(hex)) {
+                            seen.add(hex);
+                            gridColors.push(hex);
+                        }
+                    }
+                    
+                    let data = [];
+                    
+                    data.push(...[0x41, 0x53, 0x45, 0x46]);
+                    data.push(...[0x00, 0x01, 0x00, 0x00]);
+                    data.push(...this.uint32ToBytes(gridColors.length));
+                    
+                    gridColors.forEach((hex) => {
+                        const rgb = this.hexToRgb(hex);
+                        const name = hex;
+                        
+                        data.push(...[0x00, 0x01]);
+                        
+                        const nameLength = (name.length + 1) * 2;
+                        const blockLength = nameLength + 2 + 18;
+                        data.push(...this.uint32ToBytes(blockLength));
+                        
+                        data.push(...this.uint16ToBytes(name.length + 1));
+                        
+                        for (let i = 0; i < name.length; i++) {
+                            data.push(...this.uint16ToBytes(name.charCodeAt(i)));
+                        }
+                        data.push(...[0x00, 0x00]);
+                        
+                        data.push(...[0x52, 0x47, 0x42, 0x20]);
+                        
+                        data.push(...this.floatToBytes(rgb.r / 255));
+                        data.push(...this.floatToBytes(rgb.g / 255));
+                        data.push(...this.floatToBytes(rgb.b / 255));
+                        
+                        data.push(...[0x00, 0x02]);
+                    });
+                    
+                    const bytes = new Uint8Array(data);
+                    const blob = new Blob([bytes], { type: 'application/octet-stream' });
+                    
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = this.sanitizeFilename(this.exportFilename) + '.ase';
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
+                    
+                    setTimeout(() => URL.revokeObjectURL(url), 100);
+                } catch (err) {
+                    console.error('ASE export failed:', err);
+                    alert('ASE export failed: ' + err.message);
+                }
+            },
+
+            exportCSS() {
+                try {
+                    const seen = new Set();
+                    const swatches = [];
+                    
+                    for (const cell of this.gridData) {
+                        if (!seen.has(cell.hex)) {
+                            seen.add(cell.hex);
+                            swatches.push({ hex: cell.hex, isAnchor: cell.isAnchor });
+                        }
+                    }
+                    
+                    let css = ':root {\n';
+                    
+                    swatches.forEach((swatch, index) => {
+                        const num = String(index + 1).padStart(2, '0');
+                        const comment = swatch.isAnchor ? ' /* anchor */' : '';
+                        css += `  --swatch-${num}: ${swatch.hex};${comment}\n`;
+                    });
+                    
+                    css += '}';
+                    
+                    const blob = new Blob([css], { type: 'text/css;charset=utf-8' });
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = this.sanitizeFilename(this.exportFilename) + '.css';
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
+                    
+                    setTimeout(() => URL.revokeObjectURL(url), 100);
+                } catch (err) {
+                    console.error('CSS export failed:', err);
+                    alert('CSS export failed: ' + err.message);
+                }
+            },
+
+            computeExportGrid(rows, cols) {
+                const grid = [];
+                const anchorCells = new Set();
+                
+                for (const anchor of this.anchors) {
+                    anchorCells.add(`${anchor.row},${anchor.col}`);
+                }
+                
+                const anchorRgb = this.anchors.map(a => this.hexToRgb(this.colors[a.colorIndex].hex));
+
+                for (let row = 0; row < rows; row++) {
+                    for (let col = 0; col < cols; col++) {
+                        const normRow = rows > 1 ? row / (rows - 1) : 0;
+                        const normCol = cols > 1 ? col / (cols - 1) : 0;
+                        
+                        const gridRow = normRow * (this.rows - 1);
+                        const gridCol = normCol * (this.cols - 1);
+                        
+                        let totalWeightGlobal = 0;
+                        let rGlobal = 0, gGlobal = 0, bGlobal = 0;
+                        
+                        let totalWeightEdge = 0;
+                        let rEdge = 0, gEdge = 0, bEdge = 0;
+
+                        for (let ai = 0; ai < anchorRgb.length; ai++) {
+                            const anchor = this.anchors[ai];
+                            const dx = gridCol - anchor.col;
+                            const dy = gridRow - anchor.row;
+                            const dist = Math.sqrt(dx * dx + dy * dy);
+                            const weightGlobal = dist === 0 ? 1000 : 1 / (dist * dist);
+                            const weightEdge = dist === 0 ? 1000 : 1 / Math.pow(dist, 4);
+                            
+                            const color = anchorRgb[ai];
+                            
+                            rGlobal += color.r * weightGlobal;
+                            gGlobal += color.g * weightGlobal;
+                            bGlobal += color.b * weightGlobal;
+                            totalWeightGlobal += weightGlobal;
+                            
+                            rEdge += color.r * weightEdge;
+                            gEdge += color.g * weightEdge;
+                            bEdge += color.b * weightEdge;
+                            totalWeightEdge += weightEdge;
+                        }
+
+                        rGlobal = rGlobal / totalWeightGlobal;
+                        gGlobal = gGlobal / totalWeightGlobal;
+                        bGlobal = bGlobal / totalWeightGlobal;
+                        
+                        rEdge = rEdge / totalWeightEdge;
+                        gEdge = gEdge / totalWeightEdge;
+                        bEdge = bEdge / totalWeightEdge;
+                        
+                        const distToTop = gridRow;
+                        const distToBottom = (this.rows - 1) - gridRow;
+                        const distToLeft = gridCol;
+                        const distToRight = (this.cols - 1) - gridCol;
+                        const edgeProx = Math.min(distToTop, distToBottom, distToLeft, distToRight);
+                        
+                        const edgeStart = 0;
+                        const edgeEnd = Math.max(2, Math.min(this.rows, this.cols) * 0.25);
+                        let t = Math.max(0, Math.min(1, (edgeProx - edgeStart) / (edgeEnd - edgeStart)));
+                        t = t * t * (3 - 2 * t);
+                        t = 1 - t;
+                        
+                        const blendAmt = t * 0.5;
+                        
+                        const rFinal = rGlobal * (1 - blendAmt) + rEdge * blendAmt;
+                        const gFinal = gGlobal * (1 - blendAmt) + gEdge * blendAmt;
+                        const bFinal = bGlobal * (1 - blendAmt) + bEdge * blendAmt;
+                        
+                        const r = Math.max(0, Math.min(255, Math.round(rFinal)));
+                        const g = Math.max(0, Math.min(255, Math.round(gFinal)));
+                        const b = Math.max(0, Math.min(255, Math.round(bFinal)));
+                        const hex = this.rgbToHex(r, g, b);
+                        const isAnchor = anchorCells.has(`${row},${col}`);
+
+                        grid.push({ row, col, r, g, b, hex, isAnchor });
+                    }
+                }
+                
+                return grid;
+            },
+
+            hexToRgb(hex) {
+                if (!hex || typeof hex !== 'string') return { r: 0, g: 0, b: 0 };
+                hex = hex.toUpperCase();
+                if (!hex.startsWith('#')) hex = '#' + hex;
+                if (hex.length !== 7) return { r: 0, g: 0, b: 0 };
+                
+                const r = parseInt(hex.slice(1, 3), 16);
+                const g = parseInt(hex.slice(3, 5), 16);
+                const b = parseInt(hex.slice(5, 7), 16);
+                return { r, g, b };
+            },
+
+            rgbToHex(r, g, b) {
+                return '#' + [r, g, b].map(x => x.toString(16).padStart(2, '0')).join('').toUpperCase();
+            },
+
+            uint16ToBytes(val) {
+                return [(val >> 8) & 0xFF, val & 0xFF];
+            },
+
+            uint32ToBytes(val) {
+                return [(val >> 24) & 0xFF, (val >> 16) & 0xFF, (val >> 8) & 0xFF, val & 0xFF];
+            },
+
+            floatToBytes(val) {
+                const buffer = new ArrayBuffer(4);
+                const view = new DataView(buffer);
+                view.setFloat32(0, val, false);
+                return [view.getUint8(0), view.getUint8(1), view.getUint8(2), view.getUint8(3)];
+            }
+        };
+
+        window.addEventListener('load', () => app.init());
+    </script>
+</body>
+</html>
